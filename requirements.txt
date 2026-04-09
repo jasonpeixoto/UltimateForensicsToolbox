@@ -1,0 +1,12 @@
+# Core UI Framework
+PyQt5==5.15.10
+
+# Dynamic Instrumentation
+frida==16.2.1
+frida-tools==12.3.0
+
+# Code Formatting (for the ✨ Beautify button)
+jsbeautifier==1.14.11
+
+# System Utilities
+# (Note: adb and scrcpy must be installed via 'brew install' on macOS)
