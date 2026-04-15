@@ -26,7 +26,7 @@ from PyQt5.QtGui import QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QPix
 BASE_DIR = os.path.join(os.path.expanduser("~"), "UltimateFrida")
 VAULT_DIR, PROJECTS_DIR, SCRAP_DIR = [os.path.join(BASE_DIR, x) for x in ["Global_Vault", "Projects", "Scrap"]]
 CMD_FILE = os.path.join(BASE_DIR, "commands.json")
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+CONFIG_FILE = os.path.join(BASE_DIR, "config_DecryptCocoas.json")
 
 for d in [VAULT_DIR, PROJECTS_DIR, SCRAP_DIR]:
     os.makedirs(d, exist_ok=True)
@@ -885,8 +885,10 @@ class Forensics(QMainWindow):
                     z.extractall(tmp);
                     paths = [f"'{os.path.join(tmp, a)}'" for a in apks]
                     self.run_adb_cmd(f"{ADB_PATH} install-multiple -r {' '.join(paths)}")
+                    #self.run_adb_cmd(f"{ADB_PATH} install-multiple -r {tmp}/*")
             finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+                #shutil.rmtree(tmp, ignore_errors=True)
+                print("")
 
     def refresh_remote_fs(self):
         self.remote_table.setRowCount(0);
@@ -1163,16 +1165,21 @@ class Forensics(QMainWindow):
         self.adb_process.start("sh", ["-c", c])
 
     def handle_adb_stdout(self):
-        # Capture successful output in GREEN
-        out_data = self.adb_process.readAllStandardOutput().data().decode().strip()
-        if out_data:
-            self.adb_out.append(out_data)
-            self.console.append(f"<font color='#7ee787'>{out_data}</font>")
+        # FIX: Keep original newlines for the Console output
+        out_raw = self.adb_process.readAllStandardOutput().data().decode()
+        err_raw = self.adb_process.readAllStandardError().data().decode()
 
-        # Capture error responses in RED
-        err_data = self.adb_process.readAllStandardError().data().decode().strip()
-        if err_data:
-            self.console.append(f"<font color='#ff7b72'>[!] {err_data}</font>")
+        if out_raw:
+            self.adb_out.append(out_raw.strip())
+            # For the Console, we append with HTML formatting line by line to keep color and spacing
+            lines = out_raw.splitlines()
+            for line in lines:
+                self.console.append(f"<font color='#7ee787'>{line}</font>")
+
+        if err_raw:
+            lines = err_raw.splitlines()
+            for line in lines:
+                self.console.append(f"<font color='#ff7b72'>[!] {line}</font>")
 
     def get_ip(self):
         try:
