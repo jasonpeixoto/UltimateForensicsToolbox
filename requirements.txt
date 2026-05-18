@@ -1,12 +1,30 @@
+# Ultimate Forensics Toolbox - Python Requirements
+# Tested against local Python API, local CLI, and Android frida-server all reporting Frida 17.9.1.
+
 # Core UI Framework
 PyQt5==5.15.10
 
 # Dynamic Instrumentation
-frida==16.2.1
-frida-tools==12.3.0
+# IMPORTANT:
+# Keep this frida version matched to /data/local/tmp/frida-server on the Android device.
+# Your current verified working stack:
+#   Python API module: 17.9.1
+#   Local CLI/frida-tools runtime: 17.9.1
+#   Android frida-server: 17.9.1
+frida==17.9.1
+
+# Frida CLI tools package.
+# Note: frida-tools has its own package version; `frida --version` prints the Frida core/runtime version.
+frida-tools==14.8.2
 
 # Code Formatting (for the ✨ Beautify button)
 jsbeautifier==1.14.11
 
+# HTTP/proxy validation support used by ProxyTesterWorker
+requests==2.32.3
+
 # System Utilities
-# (Note: adb and scrcpy must be installed via 'brew install' on macOS)
+# adb and scrcpy are not Python packages.
+# Install on macOS with:
+#   brew install --cask android-platform-tools
+#   brew install scrcpy
