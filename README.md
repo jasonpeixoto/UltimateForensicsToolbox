@@ -2,12 +2,12 @@
 
 **Lead Developer:** Jason Peixoto  
 **Repository:** <https://github.com/jpeixoto/UltimateForensicsToolbox>  
-**Current Version:** 1.08 "Dual Frida Engine + Advanced Log Viewer"  
+**Current Version:** 1.10 "Device Status + Proxy Workspace + Full Frida Editor"  
 **Platform:** macOS host + Android USB device  
 
-Ultimate Forensics Toolbox is a PyQt5 Android dynamic-analysis, forensic extraction, Frida-instrumentation, Logcat, ADB, proxy, screenshot, and remote-control workstation. It is designed to keep the most common Android security-analysis tasks in one interface: process discovery, Frida script editing/injection, Frida server control, Logcat viewing, ADB command execution, remote file browsing, screenshots, app install/control, and device mirroring.
+Ultimate Forensics Toolbox is a PyQt5 Android dynamic-analysis, forensic extraction, Frida-instrumentation, Logcat, ADB, proxy, screenshot, and remote-control workstation. It is designed to keep the most common Android security-analysis tasks in one interface: device health checks, process discovery, Frida script editing/injection, Frida server control, Logcat viewing, ADB command execution, proxy import/validation/routing, remote file browsing, screenshots, app install/control, and device mirroring.
 
-> Use this only on devices and applications you own or have explicit authorization to test.
+> Use this only on devices, applications, networks, and accounts that you own or have explicit authorization to test.
 
 ---
 
@@ -23,6 +23,7 @@ Ultimate Forensics Toolbox is a PyQt5 Android dynamic-analysis, forensic extract
 - [Frida 17 Python API Java bridge notes](#frida-17-python-api-java-bridge-notes)
 - [How to test the setup](#how-to-test-the-setup)
 - [Feature guide](#feature-guide)
+- [Proxy workspace](#proxy-workspace)
 - [Troubleshooting and diagnostics](#troubleshooting-and-diagnostics)
 - [Runtime folders and config files](#runtime-folders-and-config-files)
 - [Useful commands](#useful-commands)
@@ -35,9 +36,10 @@ Ultimate Forensics Toolbox is a PyQt5 Android dynamic-analysis, forensic extract
 
 ### Core capabilities
 
+- **Device Status dashboard** for ADB, root, SELinux, Frida, Android proxy, foreground app, and target app checks.
 - Android ADB command console.
 - Android package/process discovery.
-- Frida script editor and injection manager.
+- Full Frida script editor and injection manager.
 - Two Frida injection engines:
   - **Command Line / frida-tools** engine.
   - **Python API / frida module** engine.
@@ -48,17 +50,35 @@ Ultimate Forensics Toolbox is a PyQt5 Android dynamic-analysis, forensic extract
   - Android `/data/local/tmp/frida-server`.
   - Python API compiler availability.
   - API Java bridge package status.
-- Color-coded Frida log viewer with checkbox category filters and text search.
-- Real-time Logcat viewer with priority filtering and search.
-- ADB file explorer with push, pull, delete, rename, folder navigation, and preview.
+- Full Frida script editor with:
+  - Line numbers.
+  - Search and replace.
+  - Regex / whole-word / case-sensitive search.
+  - Gutter markers for search hits.
+  - Go-to-line.
+  - Font zoom controls.
+  - Save / Save As / Reload.
+  - JavaScript syntax validation.
+  - Frida 17 migration warnings.
+- Color-coded Frida log viewer with checkbox category filters, search, font sizing, and error double-click jump-to-line.
+- Buffered Logcat viewer with non-destructive filtering, level checkboxes, search, export, font controls, and freeze-safe batched rendering.
+- Dedicated **Proxy** workspace tab:
+  - Multi-source proxy import.
+  - Merge/deduplicate into `manual_proxies.json`.
+  - Clear list and reimport all sources.
+  - Country/protocol counts.
+  - HTTP/SOCKS-aware validation.
+  - Android global proxy mode.
+  - Frida Java property proxy hook mode.
+  - Backup/restore/recover tools.
+- ADB file explorer with push, pull, delete, rename, folder navigation, auto-sized columns, and preview.
 - Embedded remote screen stream using `adb shell screencap -p`.
 - Optional high-speed external mirroring with `scrcpy`.
 - Remote tap and swipe injection from the preview window.
 - Screenshot capture, local gallery, clipboard copy, and portal workflow.
 - APK and split APK deployment.
 - App launch/kill controls.
-- Burp/global proxy helper.
-- Manual proxy pool management.
+- Burp/local proxy helper.
 - Frida proxy script template editor.
 - Custom ADB command button grid.
 - System tray behavior.
@@ -75,12 +95,14 @@ This README matches the current tested setup from development:
 | Host OS | macOS |
 | Python path example | `/opt/homebrew/bin/python3` |
 | Frida Python module | `17.9.1` |
-| Frida CLI/frida-tools | `17.9.1` at `/opt/homebrew/bin/frida` |
+| Frida CLI/frida-tools runtime | `17.9.1` at `/opt/homebrew/bin/frida` |
+| Recommended `frida-tools` package | `14.8.2` |
 | Android frida-server | `17.9.1` at `/data/local/tmp/frida-server` |
 | Android test device | Pixel 9a |
 | Android test version | Android 16 |
+| App title | `Ultimate Forensics Toolbox V1.10 - Jason Peixoto.` |
 
-The exact device can vary, but the **Frida Python module**, **Frida CLI**, and **Android frida-server** should match.
+The exact device can vary, but the **Frida Python module**, **Frida CLI runtime**, and **Android frida-server** should match.
 
 ---
 
@@ -138,10 +160,21 @@ If your repository includes `requirements.txt`:
 pip install -r requirements.txt
 ```
 
-If you are installing manually:
+Recommended requirements:
+
+```text
+PyQt5==5.15.10
+frida==17.9.1
+frida-tools==14.8.2
+jsbeautifier==1.14.11
+requests==2.32.3
+PySocks
+```
+
+If installing manually:
 
 ```bash
-pip install PyQt5 frida frida-tools jsbeautifier requests "requests[socks]"
+pip install PyQt5==5.15.10 frida==17.9.1 frida-tools==14.8.2 jsbeautifier==1.14.11 requests==2.32.3 PySocks
 ```
 
 Package purpose:
@@ -152,8 +185,8 @@ Package purpose:
 | `frida` | Python API injection engine |
 | `frida-tools` | CLI `frida` command and related tooling |
 | `jsbeautifier` | JavaScript formatter for Frida scripts |
-| `requests` | Proxy validation / HTTP testing |
-| `requests[socks]` | SOCKS proxy support for proxy rotation |
+| `requests` | Proxy validation/import HTTP testing |
+| `PySocks` / `requests[socks]` | SOCKS proxy validation support |
 
 ### 4. Confirm local Frida tools
 
@@ -222,15 +255,15 @@ uid=0(root) gid=0(root) groups=0(root) ...
 
 ## Frida setup
 
-### 1. Match frida-server to the local Frida version
+### 1. Match frida-server to the local Frida runtime version
 
-All three should match:
+All three runtime versions should match:
 
 ```text
-Python frida module version == local frida CLI version == Android frida-server version
+Python frida module version == local frida CLI runtime == Android frida-server version
 ```
 
-Use the toolbox **Frida version** button to check this from the GUI, or check manually:
+Use the toolbox **Frida Versions** button from **Device Status** or **Frida/ADB Control**, or check manually:
 
 ```bash
 python -c "import frida; print(frida.__version__)"
@@ -271,6 +304,12 @@ adb shell su -c "/data/local/tmp/frida-server -l 0.0.0.0 > /dev/null 2>&1 &"
 Or use the GUI:
 
 ```text
+Device Status -> Start Frida Server
+```
+
+or:
+
+```text
 Frida/ADB Control -> START SERVER
 ```
 
@@ -298,16 +337,17 @@ python UltimateForensicsToolbox.py
 
 Recommended first steps:
 
-1. Open **Frida/ADB Control**.
-2. Click **Frida version**.
-3. Confirm Python API, CLI, and Android server versions match.
-4. Click **START SERVER** if the Android frida-server is not already running.
+1. Open **Device Status**.
+2. Click **Refresh Status**.
+3. Confirm ADB, root, SELinux, Frida server, Frida versions, and Android proxy state.
+4. Click **Start Frida Server** if the Android frida-server is not already running.
 5. Open **Processes** and click **Refresh List**.
 6. Select a target package.
 7. Open **Frida Manager**.
 8. Select either **Command Line / frida-tools** or **Python API / frida module**.
 9. Paste a test script.
-10. Click **FORGE & INJECT**.
+10. Click **Validate**.
+11. Click **FORGE & INJECT**.
 
 ---
 
@@ -403,7 +443,25 @@ Expected Python API output:
 
 ## How to test the setup
 
-### 1. ADB connectivity test
+### 1. Device Status test
+
+Open **Device Status** and click:
+
+```text
+Refresh Status
+```
+
+Verify:
+
+- ADB found.
+- Device connected.
+- Root available.
+- SELinux state shown.
+- frida-server running.
+- Frida versions match.
+- Android global proxy state shown.
+
+### 2. ADB connectivity test
 
 In the **ADB Console** tab, type:
 
@@ -417,12 +475,12 @@ Expected:
 <serial>    device
 ```
 
-### 2. Frida server test
+### 3. Frida server test
 
-In **Frida/ADB Control**, click:
+In **Device Status** or **Frida/ADB Control**, click:
 
 ```text
-Frida version
+Frida Versions
 ```
 
 Expected:
@@ -434,11 +492,11 @@ Expected:
 [FRIDA VERSION] Versions appear aligned: 17.9.1
 ```
 
-### 3. Process list test
+### 4. Process list test
 
 Open **Processes**, click **Refresh List**, and verify installed apps are shown.
 
-### 4. CLI Frida injection test
+### 5. CLI Frida injection test
 
 In **Frida Manager**:
 
@@ -458,7 +516,7 @@ Expected:
 [FRIDA] CLI Frida Java bridge active: 16
 ```
 
-### 5. Python API Frida injection test
+### 6. Python API Frida injection test
 
 In **Frida Manager**:
 
@@ -478,7 +536,7 @@ Expected:
 [LOG] Python API Frida Java bridge active: 16
 ```
 
-### 6. Remote screen test
+### 7. Remote screen test
 
 Open **Remote** and click:
 
@@ -488,11 +546,11 @@ EMBEDDED STREAM
 
 You should see the Android screen in the app.
 
-### 7. Input injection test
+### 8. Input injection test
 
 Click/tap or drag/swipe on the embedded remote screen. The Android device should receive matching input events.
 
-### 8. Scrcpy test
+### 9. Scrcpy test
 
 Open **Remote** and click:
 
@@ -505,6 +563,35 @@ A scrcpy window should open.
 ---
 
 ## Feature guide
+
+### 🩺 Device Status tab
+
+Purpose: quickly confirm that the host, Android device, root, Frida, and proxy environment are ready.
+
+Features:
+
+- Refresh status manually.
+- Optional auto refresh with configurable interval.
+- Copy a full diagnostic report to clipboard.
+- Quick actions:
+  - Frida Versions.
+  - Start Frida Server.
+  - Stop Frida Server.
+  - Clear Android Proxy.
+- Checks:
+  - ADB path.
+  - Python Frida version.
+  - Local Frida CLI version.
+  - Connected device.
+  - Android model/version.
+  - Battery.
+  - Root.
+  - SELinux.
+  - frida-server process.
+  - frida-server version.
+  - Android global proxy state.
+  - Foreground app.
+  - Target app installed/running.
 
 ### 🔍 Processes tab
 
@@ -519,24 +606,38 @@ Features:
 
 ### 🛠️ Frida Manager tab
 
-Purpose: write, manage, beautify, and inject Frida scripts.
+Purpose: write, manage, validate, beautify, and inject Frida scripts.
 
-Features:
+Script folder:
 
-- Built-in JavaScript editor.
-- Frida-specific syntax highlighting.
-- Project/script tree under the toolbox workspace.
-- New project creation.
-- New script/folder context menu.
-- Rename/delete script files.
-- Save current script.
-- Beautify JavaScript.
-- Editable target package combo box.
+```text
+~/.jpeixoto/UltimateForensicsToolbox/FridaScripts
+```
+
+Editor features:
+
+- `.js` file/folder browser.
+- Line-number gutter.
+- Current line highlight.
+- Search-hit gutter highlighting.
+- Find next / previous.
+- Replace one / replace all.
+- Regex / whole-word / case-sensitive search.
+- Go to line.
+- Save / Save As / Reload.
+- JavaScript beautifier.
+- Font size controls and shortcuts.
+- Script validation with `node --check`.
+- Frida 17 API migration warnings.
+
+Frida controls:
+
 - Engine selector:
   - Command Line / frida-tools.
   - Python API / frida module.
 - Editable Frida CLI path.
 - Auto-detect Frida CLI path.
+- Editable target package combo box.
 - Forge/inject button.
 - Stop/detach button.
 
@@ -560,6 +661,8 @@ Features:
 - Pause/resume viewer.
 - Clear viewer and internal buffer.
 - Rolling buffer of the last 5,000 Frida log entries.
+- Font size controls.
+- Double-click error stack location to jump to the editor line/column when possible.
 
 ### 🕵️ LogCat tab
 
@@ -568,18 +671,39 @@ Purpose: monitor Android Logcat from inside the toolbox.
 Features:
 
 - Real-time `adb logcat -v threadtime` stream.
-- Priority selector:
+- Buffered capture model.
+- Non-destructive filters.
+- Minimum visible priority selector:
   - Verbose.
   - Debug.
   - Info.
   - Warning.
   - Error.
   - Fatal.
-- Text search.
+- Per-level checkboxes.
+- Search.
 - Hard filter option to hide non-matching lines.
-- Pause/resume.
-- Clear output.
-- Priority-based color coding.
+- Pause Display without stopping capture.
+- Auto-scroll toggle.
+- Export visible logs.
+- Configurable buffer size.
+- Batched UI rendering to reduce freezes.
+- Font size controls.
+
+### 🌐 Proxy tab
+
+Purpose: manage proxy sources, proxy pool records, validation, and Android/Frida routing.
+
+Main areas:
+
+- Proxy Source Import.
+- Proxy Router / Validator.
+- Android Global Proxy tools.
+- Country proxy pool editor.
+- Backup / restore / recover tools.
+- Status table and proxy log.
+
+See [Proxy workspace](#proxy-workspace) for details.
 
 ### 📁 File Explorer tab
 
@@ -595,6 +719,7 @@ Features:
   - `/data/local/tmp`
 - Folder filter.
 - File/folder table with name, size, date/time, and permissions.
+- Auto-sized columns.
 - Double-click folder navigation.
 - Up button.
 - Push file to current remote folder.
@@ -619,27 +744,9 @@ Features:
 
 ### 🔌 Frida/ADB Control tab
 
-Purpose: common device-control, Frida-server, proxy, install, and app-management workflows.
+Purpose: device-control, Frida-server, APK install, and app-management workflows.
 
 Features:
-
-#### Burp Proxy
-
-- Set Android global HTTP proxy.
-- Clear Android global HTTP proxy.
-- Auto-fill local Mac IP with port `8080`.
-
-#### Global Proxy Rotator / Frida Engine Proxy
-
-- Country selector.
-- Manual proxy input list.
-- Auto-fallback on failed proxy validation.
-- Proxy validation using HTTP/S request checks.
-- Proxy cache/ranking.
-- Edit raw proxy JSON file.
-- Edit Frida proxy script template.
-- Inject validated proxy into selected app through Frida.
-- Remove proxy and detach script.
 
 #### Deployment
 
@@ -685,6 +792,7 @@ Features:
 - Auto-prefixes commands with the configured `adb` path unless you type a full `adb ...` command.
 - Displays stdout/stderr in the console panel.
 - Saves command history in the config file.
+- Font size controls.
 
 ### 📱 Remote tab
 
@@ -709,6 +817,127 @@ Features:
 
 ---
 
+## Proxy workspace
+
+### Proxy Source Import
+
+The Proxy tab can import one or more public proxy lists, normalize them, and merge them into the toolbox format.
+
+Features:
+
+- Select one or more sources.
+- Select all / none.
+- HTTP-only / SOCKS-only source shortcuts.
+- Import selected / merge.
+- Import all / merge.
+- Clear list + import all.
+- Backup before destructive operations.
+- Open proxy JSON.
+- Import status table:
+  - Source.
+  - Status.
+  - Raw.
+  - Normalized.
+  - Unique.
+  - Skipped/Error.
+
+Duplicate detection uses:
+
+```text
+protocol + ip + port
+```
+
+If a source does not include country metadata, imported records are assigned to:
+
+```text
+UNKNOWN
+```
+
+### Proxy JSON format
+
+Proxy records are normalized into this general shape:
+
+```json
+{
+  "proxy": "http://1.2.3.4:8080",
+  "protocol": "http",
+  "ip": "1.2.3.4",
+  "port": 8080,
+  "https": false,
+  "anonymity": "unknown",
+  "score": 1,
+  "geolocation": {
+    "country": "UNITED STATES",
+    "city": "Unknown"
+  }
+}
+```
+
+Supported protocol values:
+
+```text
+http
+https
+socks
+socks4
+socks5
+```
+
+Plain `host:port` entries are treated as HTTP.
+
+### Proxy Router / Validator
+
+The validator supports:
+
+- Target country dropdown with counts.
+- HTTP/HTTPS proxies always included.
+- Optional SOCKS proxies checkbox.
+- Timeout control.
+- Auto-fallback across a country pool.
+- Failure reason details:
+  - Node dropped.
+  - Connection refused.
+  - Connection reset.
+  - Proxy error.
+  - SSL error.
+  - Bad response.
+  - Timeout.
+- Egress IP check.
+- Rank/cache updates.
+
+### Routing modes
+
+| Mode | What it does | Best for |
+|---|---|---|
+| Frida Java Property Hook | Hooks Java `System.getProperty()` inside one app process | Java networking stacks |
+| Android Global Proxy | Sets Android device-wide `http_proxy` through ADB | Device-wide HTTP proxy testing |
+| Android Global Only | Validate and apply global proxy without Frida injection | Browser/system proxy checks |
+| Proxy Tester Only | Validate proxies without changing device or Mac proxy settings | Cleaning/ranking lists |
+
+Important notes:
+
+- Frida Java property hooks do not guarantee that native network stacks will use the proxy.
+- Android global `http_proxy` supports HTTP-style proxy settings, not SOCKS directly.
+- Proxy validation uses an isolated Python `requests.Session()` and does not modify macOS proxy settings.
+
+### Frida proxy template placeholders
+
+The Frida proxy template supports:
+
+```text
+{protocol}
+{ip}
+{port}
+```
+
+Template path:
+
+```text
+~/.jpeixoto/UltimateForensicsToolbox/frida_proxy_template.js
+```
+
+---
+
 ## Troubleshooting and diagnostics
 
 ### Quick diagnostic checklist
@@ -727,7 +956,7 @@ adb shell su -c "ps -A | grep frida"
 Then click the GUI button:
 
 ```text
-Frida/ADB Control -> Frida version
+Device Status -> Frida Versions
 ```
 
 ### Problem table
@@ -739,25 +968,24 @@ Frida/ADB Control -> Frida version
 | `adb devices` shows `unauthorized` | RSA prompt not accepted | Unlock phone, accept prompt, or revoke USB debugging authorizations and reconnect |
 | `su: not found` or permission denied | Device is not rooted or root denied | Install/configure Magisk or grant shell root permission |
 | `frida not found` in GUI | App cannot see CLI path | Set CLI path to `/opt/homebrew/bin/frida`, click Detect, or install `frida-tools` |
-| CLI version line is blank or garbage | ANSI control-code parsing issue | Use current toolbox version; the version parser strips ANSI codes |
 | Python API version differs from CLI | Python environment mismatch | Activate venv and run `pip install --upgrade frida frida-tools` |
 | Android frida-server version differs | Wrong frida-server binary on device | Download/push frida-server matching local Frida version |
 | `unable to connect to remote frida-server` | Server not running or blocked | Click START SERVER or run frida-server manually with root |
 | `Address already in use` starting frida-server | frida-server already running | Kill it first: `adb shell su -c "pkill -9 frida-server"` |
-| Python API says `ReferenceError: Java is not defined` | Frida 17 Java bridge package not bundled | Install Node/npm, use v7+ toolbox, allow `frida-java-bridge` install, or use CLI mode |
-| Python API waits forever for Java bridge | Missing/broken `frida-java-bridge` or compiler | Click Frida version, confirm compiler/bridge status, run `cd ~/.jpeixoto/UltimateForensicsToolbox/frida_api_agent_bridge && npm install` |
+| Python API says `ReferenceError: Java is not defined` | Frida 17 Java bridge package not bundled | Install Node/npm, use Python API bridge support, or use CLI mode |
+| Python API waits forever for Java bridge | Missing/broken `frida-java-bridge` or compiler | Click Frida Versions, confirm compiler/bridge status, rerun npm install in the bridge folder |
 | `frida.Compiler` missing | Frida Python module/tooling mismatch | `pip install --upgrade frida frida-tools`; use CLI mode until fixed |
 | `npm: command not found` | Node/npm not installed | `brew install node` |
-| `console.log()` not visible in Python API mode | Raw console output not routed to Python UI | Current toolbox bridges `console.log/warn/error` into `[LOG]/[WARN]/[ERROR]` messages |
+| `console.log()` not visible in Python API mode | Raw console output not routed to Python UI | Current toolbox bridges `console.log/warn/error` into `[LOG]/[WARN]/[ERROR]` |
 | CLI works but Python API fails | API bridge/compiler issue | Use CLI mode, then diagnose Python API version/compiler/bridge status |
 | App immediately crashes after injection | Hook timing or bad script | Test with minimal `Java.perform` script, then add hooks one at a time |
-| `No frontmost app` or top app command fails | Android version output changed | Use package list/process list instead |
 | Remote stream blank | ADB screencap failed or device locked | Unlock device, test `adb shell screencap -p > test.png` |
 | Tap/swipe coordinates off | Device resolution assumption mismatch | Update remote coordinate mapping constants in code if needed |
 | `scrcpy` not found | scrcpy missing or path different | `brew install scrcpy`, confirm `which scrcpy` |
 | PyQt5 fails to start | Python/PyQt install issue | Reinstall venv, `pip install --force-reinstall PyQt5` |
-| SOCKS proxy test fails | Missing SOCKS dependency | `pip install "requests[socks]"` |
-| Manual proxy list empty | No matching country records | Edit `manual_proxies.json` or use the UI manual list commit button |
+| SOCKS proxy test fails | Missing SOCKS dependency | `pip install PySocks` |
+| Proxy imports but country count does not change | Source lacks geolocation | Entries are imported as `UNKNOWN` |
+| Proxy validates but target still shows local IP | App bypasses Java proxy or Android global proxy not applied | Use Android Global Proxy mode, force-stop/relaunch target, verify `settings get global http_proxy` |
 
 ---
 
@@ -773,13 +1001,13 @@ Important paths:
 
 | Path | Purpose |
 |---|---|
-| `Global_Vault/` | Shared Frida scripts |
-| `Projects/` | Project-specific Frida scripts |
+| `FridaScripts/` | User Frida script library |
 | `Scrap/` | Captured screenshots |
 | `commands.json` | Custom ADB Arsenal buttons |
 | `config_DecryptCocoas.json` | GUI settings, command history, last target, Frida mode/path |
-| `manual_proxies.json` | Manual proxy pool |
+| `manual_proxies.json` | Proxy pool |
 | `proxy_cache.json` | Proxy rank/cache data |
+| `proxy_backups/` | Proxy backups |
 | `frida_proxy_template.js` | Frida proxy redirection template |
 | `frida_api_agent_bridge/` | Frida 17 Python API Java bridge npm project |
 
@@ -856,10 +1084,17 @@ Set proxy:
 adb shell settings put global http_proxy 192.168.1.10:8080
 ```
 
+Check proxy:
+
+```bash
+adb shell settings get global http_proxy
+```
+
 Clear proxy:
 
 ```bash
 adb shell settings put global http_proxy :0
+adb shell settings delete global http_proxy
 ```
 
 ---
@@ -872,6 +1107,32 @@ The toolbox supports both engines because they solve different real-world proble
 
 - CLI mode is closest to a known-working Terminal command and is excellent for troubleshooting.
 - Python API mode gives the GUI full lifecycle control and better integration, but Frida 17+ requires explicit Java bridge bundling for Java hooks.
+
+### Frida 17 migration reminders
+
+Older scripts may fail with:
+
+```text
+TypeError: not a function
+```
+
+Common updates:
+
+```javascript
+// Old
+Module.findExportByName("libc.so", "fwrite");
+
+// New
+Process.getModuleByName("libc.so").findExportByName("fwrite");
+```
+
+```javascript
+// Old
+Memory.readCString(args[1]);
+
+// New
+args[1].readCString();
+```
 
 ### Logging behavior
 
@@ -888,16 +1149,6 @@ Python API script output is normalized as:
 | Internal lifecycle messages | `[SYSTEM]` |
 
 The Frida Logs tab groups `[FRIDA]` and `[LOG]` together because both represent runtime script output.
-
-### Current target package example
-
-A package such as this can be used for testing if authorized on your device:
-
-```text
-com.google.android.youtube
-```
-
-Use the **Processes** tab to populate the target package safely instead of typing it manually.
 
 ---
 
