@@ -14,15 +14,15 @@ import tempfile
 import requests  # Retained for proxy validation connection handshakes
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QTableWidget, QTableWidgetItem,
-                             QPushButton, QTextEdit, QListWidget, QLabel,
+                             QPushButton, QTextEdit, QPlainTextEdit, QListWidget, QLabel,
                              QTabWidget, QHeaderView, QFrame, QLineEdit,
                              QMessageBox, QListWidgetItem, QGridLayout, QGroupBox,
                              QInputDialog, QTreeView, QFileSystemModel, QProxyStyle,
                              QStyle, QComboBox, QCompleter, QSpinBox, QMenu, QCheckBox,
                              QFileDialog, QSplitter, QSystemTrayIcon, QAction,
                              QSizePolicy, QDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QProcess, QDir, QSize, QModelIndex, QTimer
-from PyQt5.QtGui import QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QPixmap, QImage, QTextCursor, QIcon
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QProcess, QDir, QSize, QModelIndex, QTimer, QRect, QEvent
+from PyQt5.QtGui import QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QPixmap, QImage, QTextCursor, QIcon, QPainter
 
 # --- SYSTEM SETTINGS ---
 BASE_DIR = os.path.expanduser("~/.jpeixoto/UltimateForensicsToolbox")
@@ -31,8 +31,28 @@ CMD_FILE = os.path.join(BASE_DIR, "commands.json")
 CONFIG_FILE = os.path.join(BASE_DIR, "config_DecryptCocoas.json")
 MANUAL_PROXY_FILE = os.path.join(BASE_DIR, "manual_proxies.json")
 FRIDA_TEMPLATE_FILE = os.path.join(BASE_DIR, "frida_proxy_template.js")
+FRIDA_SCRIPTS_DIR = os.path.join(BASE_DIR, "FridaScripts")
+PROXIFLY_ALL_PROXY_JSON_URL = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.json"
 
-for d in [BASE_DIR, VAULT_DIR, PROJECTS_DIR, SCRAP_DIR]:
+PROXY_IMPORT_SOURCES = [
+    {"id": "proxifly_all_json", "name": "Proxifly - All protocols JSON", "url": PROXIFLY_ALL_PROXY_JSON_URL, "format": "json", "protocol": "auto", "source": "proxifly/free-proxy-list"},
+    {"id": "proxyscrape_http", "name": "ProxyScrape - HTTP", "url": "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all", "format": "text", "protocol": "http", "source": "proxyscrape"},
+    {"id": "proxyscrape_socks4", "name": "ProxyScrape - SOCKS4", "url": "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=10000&country=all", "format": "text", "protocol": "socks4", "source": "proxyscrape"},
+    {"id": "proxyscrape_socks5", "name": "ProxyScrape - SOCKS5", "url": "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=10000&country=all", "format": "text", "protocol": "socks5", "source": "proxyscrape"},
+    {"id": "thespeedx_http", "name": "TheSpeedX - HTTP", "url": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt", "format": "text", "protocol": "http", "source": "TheSpeedX/PROXY-List"},
+    {"id": "thespeedx_socks4", "name": "TheSpeedX - SOCKS4", "url": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt", "format": "text", "protocol": "socks4", "source": "TheSpeedX/PROXY-List"},
+    {"id": "thespeedx_socks5", "name": "TheSpeedX - SOCKS5", "url": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt", "format": "text", "protocol": "socks5", "source": "TheSpeedX/PROXY-List"},
+    {"id": "monosans_json", "name": "monosans - Detailed JSON", "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies.json", "format": "json", "protocol": "auto", "source": "monosans/proxy-list"},
+    {"id": "monosans_http", "name": "monosans - HTTP", "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt", "format": "text", "protocol": "http", "source": "monosans/proxy-list"},
+    {"id": "monosans_socks4", "name": "monosans - SOCKS4", "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt", "format": "text", "protocol": "socks4", "source": "monosans/proxy-list"},
+    {"id": "monosans_socks5", "name": "monosans - SOCKS5", "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt", "format": "text", "protocol": "socks5", "source": "monosans/proxy-list"},
+    {"id": "jetkai_http", "name": "jetkai - HTTP", "url": "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt", "format": "text", "protocol": "http", "source": "jetkai/proxy-list"},
+    {"id": "jetkai_https", "name": "jetkai - HTTPS", "url": "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-https.txt", "format": "text", "protocol": "https", "source": "jetkai/proxy-list"},
+    {"id": "jetkai_socks4", "name": "jetkai - SOCKS4", "url": "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt", "format": "text", "protocol": "socks4", "source": "jetkai/proxy-list"},
+    {"id": "jetkai_socks5", "name": "jetkai - SOCKS5", "url": "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt", "format": "text", "protocol": "socks5", "source": "jetkai/proxy-list"},
+]
+
+for d in [BASE_DIR, VAULT_DIR, PROJECTS_DIR, SCRAP_DIR, FRIDA_SCRIPTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 ADB_PATH = shutil.which("adb") or "/usr/local/bin/adb"
@@ -91,14 +111,99 @@ GLOBAL_COUNTRY_MAP = {
 
 class ProxyTesterWorker(QThread):
     status_signal = pyqtSignal(str, str)
-    proxy_found_signal = pyqtSignal(str, str)
+    proxy_found_signal = pyqtSignal(str, str, str)
 
-    def __init__(self, country_code, auto_fallback):
+    def __init__(self, country_code, auto_fallback, include_socks=False, proxy_timeout_seconds=10):
         super().__init__()
         self.country_code = str(country_code).upper().strip() if country_code else "IN"
         self.auto_fallback = auto_fallback
+        # HTTP/HTTPS proxies are always included. SOCKS/SOCKS4/SOCKS5 proxies are optional
+        # because they require PySocks support in requests and use different Java properties.
+        self.include_socks = bool(include_socks)
+        try:
+            self.proxy_timeout_seconds = max(3, min(60, int(proxy_timeout_seconds)))
+        except Exception:
+            self.proxy_timeout_seconds = 10
         self.running = True
         self.cache_file = os.path.join(BASE_DIR, "proxy_cache.json")
+
+    def normalize_proxy_protocol(self, proto):
+        proto = str(proto or "http").lower().strip()
+        if proto in ("socks", "socks4", "socks5"):
+            return proto
+        if proto in ("http", "https"):
+            return proto
+        return "http"
+
+    def protocol_family(self, proto):
+        proto = self.normalize_proxy_protocol(proto)
+        return "socks" if proto.startswith("socks") else "http"
+
+    def protocol_allowed(self, proto):
+        family = self.protocol_family(proto)
+        return family == "http" or self.include_socks
+
+    def describe_proxy_failure(self, exc, elapsed_seconds):
+        """Return a user-friendly failure category for proxy validation.
+
+        A node can fail immediately without waiting for the timeout when the remote host
+        refuses the TCP connection, resets it, closes the proxy tunnel, returns a proxy
+        protocol error, or fails TLS negotiation. Only actual connect/read timeouts should
+        be labelled as TIMEOUT.
+        """
+        detail = str(exc).replace("\n", " ").strip()
+        if len(detail) > 220:
+            detail = detail[:217] + "..."
+
+        if isinstance(exc, requests.exceptions.Timeout):
+            return "TIMEOUT", f"Timeout after {elapsed_seconds:.1f}s"
+
+        if isinstance(exc, requests.exceptions.ProxyError):
+            low = detail.lower()
+            if "connection refused" in low:
+                return "NODE DROPPED", "Connection refused by proxy host"
+            if "connection reset" in low or "reset by peer" in low:
+                return "NODE DROPPED", "Connection reset by proxy host"
+            if "remote end closed" in low or "closed connection" in low:
+                return "NODE DROPPED", "Proxy closed the connection"
+            if "tunnel" in low:
+                return "PROXY ERROR", "Proxy tunnel failed"
+            return "PROXY ERROR", detail or "Proxy protocol failure"
+
+        if isinstance(exc, requests.exceptions.SSLError):
+            return "SSL ERROR", detail or "TLS/SSL negotiation failed"
+
+        if isinstance(exc, requests.exceptions.ConnectionError):
+            low = detail.lower()
+            if "connection refused" in low:
+                return "NODE DROPPED", "Connection refused immediately"
+            if "connection reset" in low or "reset by peer" in low:
+                return "NODE DROPPED", "Connection reset by peer"
+            if "no route to host" in low or "network is unreachable" in low:
+                return "NODE DROPPED", "Network unreachable / no route to host"
+            if "remote end closed" in low or "closed connection" in low:
+                return "NODE DROPPED", "Remote side closed connection"
+            return "CONNECTION ERROR", detail or "Connection failed"
+
+        if isinstance(exc, requests.exceptions.InvalidProxyURL):
+            return "BAD PROXY URL", detail or "Invalid proxy URL"
+
+        if isinstance(exc, requests.exceptions.RequestException):
+            return "REQUEST ERROR", detail or "Request failed"
+
+        return "ERROR", detail or exc.__class__.__name__
+
+    def mark_proxy_failure(self, cache, node, proto, ip, port):
+        node["rank"] = node.get("rank", 0) - 5
+        if self.country_code not in cache:
+            cache[self.country_code] = []
+        existing = next((x for x in cache[self.country_code] if x.get("ip") == ip and str(x.get("port")) == str(port)), None)
+        if existing:
+            existing["rank"] = node["rank"]
+            existing["protocol"] = proto
+        else:
+            cache[self.country_code].append({"ip": ip, "port": port, "rank": node["rank"], "protocol": proto})
+        self.save_cache(cache)
 
     def load_cache(self):
         if os.path.exists(self.cache_file):
@@ -129,7 +234,8 @@ class ProxyTesterWorker(QThread):
         cache = self.load_cache()
         country_pool = []
 
-        self.status_signal.emit("INFO", f"Loading local file array for [{self.country_code}]...")
+        proxy_mode = "HTTP/HTTPS + SOCKS" if self.include_socks else "HTTP/HTTPS only"
+        self.status_signal.emit("INFO", f"Loading local file array for [{self.country_code}] ({proxy_mode})...")
         target_full_name = GLOBAL_COUNTRY_MAP.get(self.country_code, "")
 
         manual_data = self.load_manual_proxies()
@@ -148,7 +254,10 @@ class ProxyTesterWorker(QThread):
                 if c_code == self.country_code or (target_full_name and target_full_name in c_code):
                     ip_val = item.get("ip")
                     port_val = str(item.get("port")) if item.get("port") is not None else ""
-                    proto = str(item.get("protocol", "http")).lower().strip()
+                    proto = self.normalize_proxy_protocol(item.get("protocol", "http"))
+                    # HTTP/HTTPS records are always eligible. SOCKS records are only eligible when enabled.
+                    if not self.protocol_allowed(proto):
+                        continue
 
                     if ip_val and port_val:
                         historical_rank = 0
@@ -169,6 +278,13 @@ class ProxyTesterWorker(QThread):
         country_pool.sort(key=lambda x: x.get("rank", 0), reverse=True)
         self.status_signal.emit("INFO",
                                 f"Pool targeted with {len(country_pool)} local nodes. Beginning verification sweep...")
+        self.status_signal.emit("INFO", f"Proxy testing uses an isolated requests session and will not modify macOS proxy settings. Timeout: {self.proxy_timeout_seconds}s.")
+        self.status_signal.emit("INFO", "Proxy failure diagnostics v27 active: fast failures show NODE DROPPED / CONNECTION ERROR / PROXY ERROR / SSL ERROR / TIMEOUT with elapsed seconds.")
+
+        session = requests.Session()
+        # Do not inherit HTTP_PROXY/HTTPS_PROXY/NO_PROXY or macOS/system proxy environment.
+        # The candidate proxy below is used only for this one validation request.
+        session.trust_env = False
 
         for idx, node in enumerate(country_pool):
             if not self.running: break
@@ -176,15 +292,27 @@ class ProxyTesterWorker(QThread):
             ip, port = node["ip"], str(node["port"])
             proto = node.get("protocol", "http")
             self.status_signal.emit("TESTING",
-                                    f"[{idx + 1}/{len(country_pool)}] Handshake target -> {ip}:{port} (Rank: {node.get('rank', 0)})")
+                                    f"[{idx + 1}/{len(country_pool)}] Handshake target -> {proto}://{ip}:{port} (Rank: {node.get('rank', 0)})")
+
+            proxy_url = f"{proto}://{ip}:{port}" if "socks" in proto else f"http://{ip}:{port}"
+            test_proxies = {"http": proxy_url, "https": proxy_url}
+            start_time = time.monotonic()
 
             try:
-                proxy_url = f"{proto}://{ip}:{port}" if "socks" in proto else f"http://{ip}:{port}"
-                test_proxies = {"http": proxy_url, "https": proxy_url}
-                test_res = requests.get("https://www.google.com", proxies=test_proxies, timeout=3)
+                test_res = session.get("https://www.google.com", proxies=test_proxies, timeout=self.proxy_timeout_seconds)
+                elapsed = time.monotonic() - start_time
 
                 if test_res.status_code == 200:
-                    self.status_signal.emit("SUCCESS", f"Validated active pipeline path: {ip}:{port}!")
+                    self.status_signal.emit("SUCCESS", f"Validated active pipeline path: {proto}://{ip}:{port}! ({elapsed:.1f}s)")
+                    try:
+                        ip_start = time.monotonic()
+                        ip_res = session.get("https://api.ipify.org", proxies=test_proxies, timeout=max(self.proxy_timeout_seconds, 10))
+                        ip_elapsed = time.monotonic() - ip_start
+                        egress_ip = ip_res.text.strip()
+                        if egress_ip:
+                            self.status_signal.emit("INFO", f"Proxy egress IP reported by api.ipify.org: {egress_ip} ({ip_elapsed:.1f}s)")
+                    except Exception as ip_err:
+                        self.status_signal.emit("WARN", f"Could not verify proxy egress IP: {str(ip_err)}")
                     node["rank"] = node.get("rank", 0) + 1
 
                     if self.country_code not in cache: cache[self.country_code] = []
@@ -192,31 +320,635 @@ class ProxyTesterWorker(QThread):
                                     None)
                     if existing:
                         existing["rank"] = node["rank"]
+                        existing["protocol"] = proto
                     else:
-                        cache[self.country_code].append({"ip": ip, "port": port, "rank": node["rank"]})
+                        cache[self.country_code].append({"ip": ip, "port": port, "rank": node["rank"], "protocol": proto})
 
                     self.save_cache(cache)
-                    self.proxy_found_signal.emit(ip, port)
+                    self.proxy_found_signal.emit(ip, port, proto)
                     return
 
-            except Exception:
-                node["rank"] = node.get("rank", 0) - 5
-                if self.country_code not in cache: cache[self.country_code] = []
-                existing = next((x for x in cache[self.country_code] if x["ip"] == ip and str(x["port"]) == port), None)
-                if existing:
-                    existing["rank"] = node["rank"]
-                else:
-                    cache[self.country_code].append({"ip": ip, "port": port, "rank": node["rank"]})
-                self.save_cache(cache)
+                self.mark_proxy_failure(cache, node, proto, ip, port)
+                self.status_signal.emit("WARN", f"Bad response from node: HTTP {test_res.status_code} after {elapsed:.1f}s. Moving to next baseline option...")
+                if self.auto_fallback:
+                    continue
+                return
+
+            except Exception as e:
+                elapsed = time.monotonic() - start_time
+                if "socks" in str(proto).lower() and ("SOCKS" in str(e) or "Missing dependencies" in str(e)):
+                    self.status_signal.emit("ERROR", "SOCKS proxy validation requires PySocks. Install it with: pip install PySocks")
+
+                failure_type, failure_reason = self.describe_proxy_failure(e, elapsed)
+                self.mark_proxy_failure(cache, node, proto, ip, port)
 
                 if self.auto_fallback:
-                    self.status_signal.emit("WARN", "Node dropped or timed out. Moving to next baseline option...")
+                    self.status_signal.emit("WARN", f"{failure_type}: {failure_reason} ({elapsed:.1f}s). Moving to next baseline option...")
                     continue
                 else:
-                    self.status_signal.emit("ERROR", f"Connection dropped on test candidate: {ip}:{port}")
+                    self.status_signal.emit("ERROR", f"{failure_type} on test candidate {proto}://{ip}:{port}: {failure_reason} ({elapsed:.1f}s)")
                     return
 
         self.status_signal.emit("CRITICAL", "Validation matrix exhausted. Zero candidate responses logged.")
+
+    def stop(self):
+        self.running = False
+
+
+class ProxiflyImportWorker(QThread):
+    status_signal = pyqtSignal(str, str)
+    result_signal = pyqtSignal(object, int, int, int, str)
+
+    def __init__(self, url=PROXIFLY_ALL_PROXY_JSON_URL, timeout_seconds=30):
+        super().__init__()
+        self.url = url
+        try:
+            self.timeout_seconds = max(10, min(120, int(timeout_seconds)))
+        except Exception:
+            self.timeout_seconds = 30
+        self.running = True
+
+    def normalize_protocol(self, proto):
+        proto = str(proto or "http").lower().strip()
+        if proto in ("socks", "socks4", "socks5"):
+            return proto
+        if proto in ("http", "https"):
+            return proto
+        return "http"
+
+    def parse_proxy_string(self, value):
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        proto = "http"
+        m = re.match(r'^([a-zA-Z0-9+.-]+)://(.+)$', raw)
+        if m:
+            proto = self.normalize_protocol(m.group(1))
+            raw = m.group(2)
+        if ":" not in raw:
+            return None
+        host, port = raw.rsplit(":", 1)
+        host = host.strip().strip("[]")
+        port = str(port).strip()
+        if not host or not port.isdigit():
+            return None
+        return {"ip": host, "port": int(port), "protocol": proto}
+
+    def country_from_record(self, item):
+        if not isinstance(item, dict):
+            return ""
+        geo = item.get("geolocation") or item.get("geo") or item.get("location") or {}
+        if isinstance(geo, dict):
+            for key in ("country", "countryCode", "country_code", "iso", "code"):
+                val = geo.get(key)
+                if val:
+                    return str(val).upper().strip()
+        for key in ("country", "countryCode", "country_code", "iso", "code"):
+            val = item.get(key)
+            if val:
+                return str(val).upper().strip()
+        return ""
+
+    def city_from_record(self, item):
+        if not isinstance(item, dict):
+            return "Unknown"
+        geo = item.get("geolocation") or item.get("geo") or item.get("location") or {}
+        if isinstance(geo, dict):
+            city = geo.get("city") or geo.get("region") or geo.get("state")
+            if city:
+                return str(city)
+        city = item.get("city") or item.get("region") or item.get("state")
+        return str(city) if city else "Unknown"
+
+    def records_from_payload(self, payload):
+        if isinstance(payload, dict):
+            for key in ("data", "proxies", "items", "results"):
+                if isinstance(payload.get(key), list):
+                    return payload.get(key)
+            return []
+        if isinstance(payload, list):
+            return payload
+        return []
+
+    def parse_item(self, item):
+        if isinstance(item, str):
+            parsed = self.parse_proxy_string(item)
+            if not parsed:
+                return None
+            return {
+                "proxy": f"{parsed['protocol']}://{parsed['ip']}:{parsed['port']}",
+                "protocol": parsed["protocol"],
+                "ip": parsed["ip"],
+                "port": parsed["port"],
+                "https": parsed["protocol"] in ("http", "https"),
+                "anonymity": "proxifly-import",
+                "score": 1,
+                "source": "proxifly/free-proxy-list",
+                "geolocation": {"country": "UNKNOWN", "city": "Unknown"},
+            }
+
+        if not isinstance(item, dict):
+            return None
+
+        proxy_value = item.get("proxy") or item.get("url") or item.get("address") or item.get("server")
+        parsed = self.parse_proxy_string(proxy_value) if proxy_value else None
+
+        proto = self.normalize_protocol(item.get("protocol") or item.get("type") or (parsed or {}).get("protocol") or "http")
+        ip = str(item.get("ip") or item.get("host") or item.get("addr") or (parsed or {}).get("ip") or "").strip()
+        port_val = item.get("port") if item.get("port") is not None else (parsed or {}).get("port")
+
+        if not ip or port_val is None:
+            return None
+        try:
+            port = int(str(port_val).strip())
+        except Exception:
+            return None
+
+        country = self.country_from_record(item) or "UNKNOWN"
+        city = self.city_from_record(item)
+        anonymity = item.get("anonymity") or item.get("anonymityLevel") or item.get("level") or "proxifly-import"
+        score = item.get("score", item.get("latency", item.get("uptime", 1)))
+
+        return {
+            "proxy": f"{proto}://{ip}:{port}",
+            "protocol": proto,
+            "ip": ip,
+            "port": port,
+            "https": proto in ("http", "https"),
+            "anonymity": str(anonymity),
+            "score": score,
+            "source": "proxifly/free-proxy-list",
+            "geolocation": {
+                "country": country,
+                "city": city,
+            },
+        }
+
+    def run(self):
+        try:
+            self.status_signal.emit("INFO", f"Fetching free proxy list from Proxifly: {self.url}")
+            session = requests.Session()
+            session.trust_env = False
+            res = session.get(self.url, timeout=self.timeout_seconds)
+            res.raise_for_status()
+            payload = res.json()
+            raw_items = self.records_from_payload(payload)
+            total_items = len(raw_items)
+            self.status_signal.emit("INFO", f"Downloaded {total_items} raw proxy record(s). Normalizing...")
+
+            normalized = []
+            skipped = 0
+            seen = set()
+            for item in raw_items:
+                if not self.running:
+                    self.result_signal.emit(normalized, total_items, skipped, 0, "cancelled")
+                    return
+                rec = self.parse_item(item)
+                if not rec:
+                    skipped += 1
+                    continue
+                key = (rec.get("protocol"), rec.get("ip"), str(rec.get("port")))
+                if key in seen:
+                    skipped += 1
+                    continue
+                seen.add(key)
+                normalized.append(rec)
+
+            self.result_signal.emit(normalized, total_items, skipped, len(normalized), "")
+        except Exception as e:
+            self.result_signal.emit([], 0, 0, 0, str(e))
+
+    def stop(self):
+        self.running = False
+
+
+class ProxySourceImportWorker(QThread):
+    status_signal = pyqtSignal(str, str)
+    result_signal = pyqtSignal(object, object, str)
+
+    def __init__(self, sources, timeout_seconds=30):
+        super().__init__()
+        self.sources = list(sources or [])
+        try:
+            self.timeout_seconds = max(10, min(180, int(timeout_seconds)))
+        except Exception:
+            self.timeout_seconds = 30
+        self.running = True
+
+    def normalize_protocol(self, proto):
+        proto = str(proto or "http").lower().strip()
+        if proto in ("socks", "socks4", "socks5"):
+            return proto
+        if proto in ("http", "https"):
+            return proto
+        return "http"
+
+    def parse_proxy_string(self, value, default_protocol="http"):
+        raw = str(value or "").strip()
+        if not raw or raw.startswith("#"):
+            return None
+        proto = self.normalize_protocol(default_protocol)
+        m = re.match(r'^([a-zA-Z0-9+.-]+)://(.+)$', raw)
+        if m:
+            proto = self.normalize_protocol(m.group(1))
+            raw = m.group(2)
+        # Strip credentials if present: user:pass@host:port -> host:port
+        if "@" in raw:
+            raw = raw.rsplit("@", 1)[1]
+        if ":" not in raw:
+            return None
+        host, port = raw.rsplit(":", 1)
+        host = host.strip().strip("[]")
+        port = str(port).strip()
+        if not host or not port.isdigit():
+            return None
+        port_i = int(port)
+        if port_i <= 0 or port_i > 65535:
+            return None
+        return {"ip": host, "port": port_i, "protocol": proto}
+
+    def extract_records_from_json(self, payload):
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("data", "proxies", "items", "results", "list"):
+                val = payload.get(key)
+                if isinstance(val, list):
+                    return val
+            # Some JSON lists are dictionaries keyed by proxy string.
+            proxy_like = []
+            for key, val in payload.items():
+                if isinstance(val, dict):
+                    item = dict(val)
+                    item.setdefault("proxy", key)
+                    proxy_like.append(item)
+                elif isinstance(val, str):
+                    proxy_like.append(val)
+            return proxy_like
+        return []
+
+    def country_from_record(self, item):
+        if not isinstance(item, dict):
+            return ""
+        geo = item.get("geolocation") or item.get("geo") or item.get("location") or item.get("country") or {}
+        if isinstance(geo, dict):
+            for key in ("country", "countryCode", "country_code", "iso", "code"):
+                val = geo.get(key)
+                if val:
+                    return str(val).upper().strip()
+        elif isinstance(geo, str) and geo.strip():
+            return geo.upper().strip()
+        for key in ("country", "countryCode", "country_code", "iso", "code"):
+            val = item.get(key)
+            if val:
+                return str(val).upper().strip()
+        return ""
+
+    def city_from_record(self, item):
+        if not isinstance(item, dict):
+            return "Unknown"
+        geo = item.get("geolocation") or item.get("geo") or item.get("location") or {}
+        if isinstance(geo, dict):
+            city = geo.get("city") or geo.get("region") or geo.get("state")
+            if city:
+                return str(city)
+        city = item.get("city") or item.get("region") or item.get("state")
+        return str(city) if city else "Unknown"
+
+    def parse_item(self, item, source):
+        default_proto = self.normalize_protocol(source.get("protocol", "http"))
+        source_name = source.get("source") or source.get("name") or "proxy-import"
+
+        if isinstance(item, str):
+            parsed = self.parse_proxy_string(item, default_protocol=default_proto)
+            if not parsed:
+                return None
+            return {
+                "proxy": f"{parsed['protocol']}://{parsed['ip']}:{parsed['port']}",
+                "protocol": parsed["protocol"],
+                "ip": parsed["ip"],
+                "port": parsed["port"],
+                "https": parsed["protocol"] in ("http", "https"),
+                "anonymity": "source-import",
+                "score": 1,
+                "source": source_name,
+                "geolocation": {"country": "UNKNOWN", "city": "Unknown"},
+            }
+
+        if not isinstance(item, dict):
+            return None
+
+        proxy_value = item.get("proxy") or item.get("url") or item.get("address") or item.get("server")
+        parsed = self.parse_proxy_string(proxy_value, default_protocol=default_proto) if proxy_value else None
+
+        proto = self.normalize_protocol(item.get("protocol") or item.get("type") or item.get("scheme") or (parsed or {}).get("protocol") or default_proto)
+        ip = str(item.get("ip") or item.get("host") or item.get("addr") or item.get("hostname") or (parsed or {}).get("ip") or "").strip()
+        port_val = item.get("port") if item.get("port") is not None else (parsed or {}).get("port")
+        if not ip or port_val is None:
+            return None
+        try:
+            port = int(str(port_val).strip())
+        except Exception:
+            return None
+        if port <= 0 or port > 65535:
+            return None
+
+        country = self.country_from_record(item) or "UNKNOWN"
+        city = self.city_from_record(item)
+        anonymity = item.get("anonymity") or item.get("anonymityLevel") or item.get("level") or "source-import"
+        score = item.get("score", item.get("latency", item.get("uptime", 1)))
+
+        return {
+            "proxy": f"{proto}://{ip}:{port}",
+            "protocol": proto,
+            "ip": ip,
+            "port": port,
+            "https": proto in ("http", "https"),
+            "anonymity": str(anonymity),
+            "score": score,
+            "source": source_name,
+            "geolocation": {"country": country, "city": city},
+        }
+
+    def parse_text_payload(self, text_payload, source):
+        records = []
+        skipped = 0
+        seen = set()
+        for line in str(text_payload or "").splitlines():
+            raw = line.strip()
+            if not raw or raw.startswith("#") or raw.startswith("//"):
+                continue
+            parsed = self.parse_proxy_string(raw, default_protocol=source.get("protocol", "http"))
+            if not parsed:
+                skipped += 1
+                continue
+            key = (parsed["protocol"], parsed["ip"], str(parsed["port"]))
+            if key in seen:
+                skipped += 1
+                continue
+            seen.add(key)
+            records.append({
+                "proxy": f"{parsed['protocol']}://{parsed['ip']}:{parsed['port']}",
+                "protocol": parsed["protocol"],
+                "ip": parsed["ip"],
+                "port": parsed["port"],
+                "https": parsed["protocol"] in ("http", "https"),
+                "anonymity": "text-import",
+                "score": 1,
+                "source": source.get("source") or source.get("name") or "proxy-import",
+                "geolocation": {"country": "UNKNOWN", "city": "Unknown"},
+            })
+        return records, skipped
+
+    def fetch_one_source(self, session, source):
+        name = source.get("name", source.get("url", "Unknown Source"))
+        url = source.get("url")
+        fmt = str(source.get("format", "text")).lower().strip()
+        self.status_signal.emit("TESTING", f"Importing source: {name}")
+        res = session.get(url, timeout=self.timeout_seconds)
+        res.raise_for_status()
+
+        if fmt == "json":
+            payload = res.json()
+            raw_items = self.extract_records_from_json(payload)
+            total = len(raw_items)
+            normalized = []
+            skipped = 0
+            seen = set()
+            for item in raw_items:
+                if not self.running:
+                    break
+                rec = self.parse_item(item, source)
+                if not rec:
+                    skipped += 1
+                    continue
+                key = (rec.get("protocol"), rec.get("ip"), str(rec.get("port")))
+                if key in seen:
+                    skipped += 1
+                    continue
+                seen.add(key)
+                normalized.append(rec)
+            return normalized, total, skipped
+
+        normalized, skipped = self.parse_text_payload(res.text, source)
+        return normalized, len(str(res.text or "").splitlines()), skipped
+
+    def run(self):
+        all_records = []
+        stats = {"sources": [], "total_raw": 0, "total_normalized": 0, "total_skipped": 0}
+        try:
+            if not self.sources:
+                self.result_signal.emit([], stats, "No proxy sources selected.")
+                return
+            session = requests.Session()
+            session.trust_env = False
+            global_seen = set()
+            for source in self.sources:
+                if not self.running:
+                    break
+                name = source.get("name", "Unknown Source")
+                try:
+                    records, raw_count, skipped = self.fetch_one_source(session, source)
+                    added_here = 0
+                    duplicate_here = 0
+                    for rec in records:
+                        key = (rec.get("protocol"), rec.get("ip"), str(rec.get("port")))
+                        if key in global_seen:
+                            duplicate_here += 1
+                            continue
+                        global_seen.add(key)
+                        all_records.append(rec)
+                        added_here += 1
+                    stats["sources"].append({
+                        "name": name,
+                        "status": "OK",
+                        "raw": raw_count,
+                        "normalized": len(records),
+                        "deduped": added_here,
+                        "skipped": skipped + duplicate_here,
+                        "error": "",
+                    })
+                    stats["total_raw"] += raw_count
+                    stats["total_normalized"] += added_here
+                    stats["total_skipped"] += skipped + duplicate_here
+                    self.status_signal.emit("SUCCESS", f"{name}: raw={raw_count}, normalized={len(records)}, unique added to import batch={added_here}, skipped={skipped + duplicate_here}")
+                except Exception as e:
+                    stats["sources"].append({"name": name, "status": "ERROR", "raw": 0, "normalized": 0, "deduped": 0, "skipped": 0, "error": str(e)})
+                    self.status_signal.emit("ERROR", f"{name}: {str(e)}")
+            self.result_signal.emit(all_records, stats, "")
+        except Exception as e:
+            self.result_signal.emit(all_records, stats, str(e))
+
+    def stop(self):
+        self.running = False
+
+
+
+class DeviceStatusWorker(QThread):
+    row_signal = pyqtSignal(str, str, str, str)  # check, status, detail, color
+    log_signal = pyqtSignal(str, str)            # message, color
+    done_signal = pyqtSignal()
+
+    def __init__(self, target_pkg="", frida_cli_path=""):
+        super().__init__()
+        self.target_pkg = str(target_pkg or "").strip()
+        self.frida_cli_path = str(frida_cli_path or FRIDA_CLI_PATH).strip()
+        self.running = True
+
+    def _clean(self, value):
+        text = str(value or "")
+        text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", text)
+        text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", text)
+        return text.strip()
+
+    def _run(self, cmd, timeout=6):
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+            return result.returncode, self._clean(result.stdout)
+        except subprocess.TimeoutExpired:
+            return 124, "timeout"
+        except FileNotFoundError:
+            return 127, "not found"
+        except Exception as e:
+            return 1, str(e)
+
+    def _emit(self, check, status, detail, color):
+        if self.running:
+            self.row_signal.emit(check, status, detail, color)
+
+    def _log(self, msg, color="#8b949e"):
+        if self.running:
+            self.log_signal.emit(msg, color)
+
+    def _adb(self, *args, timeout=6):
+        return self._run([ADB_PATH, *args], timeout=timeout)
+
+    def _adb_shell(self, command, timeout=6):
+        return self._run([ADB_PATH, "shell", command], timeout=timeout)
+
+    def run(self):
+        try:
+            self._log("Starting device health check...", "#58a6ff")
+
+            # Local tooling checks
+            if os.path.exists(ADB_PATH) or shutil.which("adb"):
+                rc, out = self._run([ADB_PATH, "version"], timeout=4)
+                first = out.splitlines()[0] if out else "adb found"
+                self._emit("Local ADB", "OK", f"{ADB_PATH} | {first}", "#7ee787")
+            else:
+                self._emit("Local ADB", "FAIL", f"ADB not found at {ADB_PATH}", "#ff7b72")
+
+            py_ver = getattr(frida, "__version__", "unknown")
+            self._emit("Python Frida", "OK", f"frida module {py_ver}", "#7ee787")
+
+            cli_path = self.frida_cli_path or shutil.which("frida") or FRIDA_CLI_PATH
+            if cli_path and os.path.exists(cli_path):
+                rc, out = self._run([cli_path, "--version"], timeout=4)
+                m = re.search(r"(\d+\.\d+\.\d+)", out or "")
+                cli_ver = m.group(1) if m else (out or "unknown")
+                self._emit("Frida CLI", "OK", f"{cli_ver} | {cli_path}", "#7ee787")
+            else:
+                self._emit("Frida CLI", "WARN", f"CLI not found at {cli_path}", "#ffa657")
+
+            # Device connection
+            rc, devices_out = self._run([ADB_PATH, "devices"], timeout=6)
+            lines = [ln.strip() for ln in devices_out.splitlines() if ln.strip() and not ln.lower().startswith("list of devices")]
+            active = [ln for ln in lines if "\tdevice" in ln]
+            unauthorized = [ln for ln in lines if "unauthorized" in ln]
+            offline = [ln for ln in lines if "offline" in ln]
+
+            if unauthorized:
+                self._emit("ADB Device", "WARN", "Device unauthorized. Accept the RSA prompt on the phone.", "#ffa657")
+                self.done_signal.emit()
+                return
+            if offline:
+                self._emit("ADB Device", "WARN", "Device is offline. Try reconnecting USB or restarting adb server.", "#ffa657")
+                self.done_signal.emit()
+                return
+            if not active:
+                self._emit("ADB Device", "FAIL", "No authorized Android device found. Run: adb devices", "#ff7b72")
+                self.done_signal.emit()
+                return
+
+            serial = active[0].split()[0]
+            self._emit("ADB Device", "OK", f"Connected: {serial}", "#7ee787")
+
+            rc, model = self._adb_shell("getprop ro.product.model", timeout=4)
+            rc, manufacturer = self._adb_shell("getprop ro.product.manufacturer", timeout=4)
+            rc, android_ver = self._adb_shell("getprop ro.build.version.release", timeout=4)
+            rc, sdk_ver = self._adb_shell("getprop ro.build.version.sdk", timeout=4)
+            self._emit("Android Build", "OK", f"{manufacturer} {model} | Android {android_ver} / SDK {sdk_ver}", "#7ee787")
+
+            rc, battery = self._adb_shell("dumpsys battery | grep -E 'level:|status:|temperature:'", timeout=5)
+            if battery and "timeout" not in battery.lower():
+                compact = "; ".join([ln.strip() for ln in battery.splitlines() if ln.strip()])
+                self._emit("Battery", "OK", compact, "#7ee787")
+
+            # Root and SELinux
+            rc, id_out = self._adb_shell("su -c id", timeout=5)
+            if "uid=0" in id_out:
+                self._emit("Root / su", "OK", id_out, "#7ee787")
+            else:
+                self._emit("Root / su", "WARN", id_out or "Root unavailable or denied", "#ffa657")
+
+            rc, selinux = self._adb_shell("getenforce", timeout=4)
+            selinux_state = (selinux or "unknown").splitlines()[0].strip()
+            if selinux_state.lower() == "permissive":
+                self._emit("SELinux", "OK", "Permissive", "#7ee787")
+            elif selinux_state.lower() == "enforcing":
+                self._emit("SELinux", "WARN", "Enforcing. Frida may still work, but some actions may need permissive/root.", "#ffa657")
+            else:
+                self._emit("SELinux", "WARN", selinux_state, "#ffa657")
+
+            # frida-server
+            rc, frida_pid = self._adb_shell("su -c 'pidof frida-server || ps -A | grep frida-server'", timeout=5)
+            if frida_pid and "not found" not in frida_pid.lower() and "permission" not in frida_pid.lower():
+                self._emit("frida-server", "OK", f"Running: {frida_pid.splitlines()[0]}", "#7ee787")
+            else:
+                self._emit("frida-server", "WARN", "Not running or not visible. Use START SERVER.", "#ffa657")
+
+            rc, server_ver = self._adb_shell("su -c '/data/local/tmp/frida-server --version'", timeout=5)
+            m = re.search(r"(\d+\.\d+\.\d+)", server_ver or "")
+            if m:
+                self._emit("frida-server Version", "OK", m.group(1), "#7ee787")
+            else:
+                self._emit("frida-server Version", "WARN", server_ver or "Could not read /data/local/tmp/frida-server", "#ffa657")
+
+            # Proxy state
+            rc, proxy = self._adb_shell("settings get global http_proxy", timeout=4)
+            proxy = (proxy or "").strip()
+            if proxy and proxy.lower() not in ("null", ":0"):
+                self._emit("Android Global Proxy", "WARN", proxy, "#ffa657")
+            else:
+                self._emit("Android Global Proxy", "OK", "clear", "#7ee787")
+
+            # Current foreground app and optional selected target app
+            rc, top = self._adb_shell("dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -n 1", timeout=6)
+            if top:
+                self._emit("Foreground App", "INFO", top, "#58a6ff")
+
+            if self.target_pkg:
+                rc, pm = self._adb_shell(f"pm path {self.target_pkg}", timeout=5)
+                if "package:" in pm:
+                    rc, pid = self._adb_shell(f"pidof {self.target_pkg}", timeout=4)
+                    if pid:
+                        self._emit("Selected Target", "OK", f"{self.target_pkg} running pid={pid}", "#7ee787")
+                    else:
+                        self._emit("Selected Target", "INFO", f"{self.target_pkg} installed but not running", "#58a6ff")
+                else:
+                    self._emit("Selected Target", "WARN", f"{self.target_pkg} not installed or not visible", "#ffa657")
+
+            self._log("Device health check complete.", "#7ee787")
+        finally:
+            self.done_signal.emit()
 
     def stop(self):
         self.running = False
@@ -231,9 +963,13 @@ class LogcatWorker(QThread):
 
     def run(self):
         process = subprocess.Popen([ADB_PATH, "logcat", "-v", "threadtime"],
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         while self.running:
-            line = process.stdout.readline()
+            try:
+                line = process.stdout.readline()
+            except UnicodeDecodeError as e:
+                self.new_log_signal.emit(f"[UFT-DECODE-WARN] Replaced undecodable logcat bytes: {e}")
+                continue
             if line:
                 self.new_log_signal.emit(line.strip())
             else:
@@ -460,6 +1196,8 @@ class FridaWorker(QThread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=120
             )
             if result.stdout:
@@ -572,6 +1310,8 @@ class FridaWorker(QThread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 env=env
             )
@@ -580,7 +1320,11 @@ class FridaWorker(QThread):
                 if self.isInterruptionRequested():
                     self.process.terminate()
                     break
-                line = self.process.stdout.readline()
+                try:
+                    line = self.process.stdout.readline()
+                except UnicodeDecodeError as e:
+                    self.log_signal.emit("WARN", f"CLI output contained undecodable bytes; replaced/ignored: {e}")
+                    continue
                 if line:
                     clean_line = re.sub(r"\[[^\]]+::[^\]]+\]\s*->", "", line).strip()
                     if clean_line:
@@ -664,6 +1408,268 @@ class FridaWorker(QThread):
 
 # --- UI COMPONENTS ---
 
+class LineNumberArea(QWidget):
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.code_editor = editor
+
+    def sizeHint(self):
+        return QSize(self.code_editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event):
+        self.code_editor.line_number_area_paint_event(event)
+
+
+class FridaScriptEditor(QPlainTextEdit):
+    """Plain-text Frida script editor with a left-side line-number gutter and zoom support."""
+
+    fontSizeChanged = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.line_number_area = LineNumberArea(self)
+        self.search_match_lines = set()
+        self.active_search_match_line = None
+        self.min_font_size = 8
+        self.max_font_size = 40
+        self.default_font_size = 12
+        self._native_zoom_accum = 0.0
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.cursorPositionChanged.connect(self.update)
+        self.cursorPositionChanged.connect(self.line_number_area.update)
+        self.update_line_number_area_width(0)
+
+    def set_script_font_size(self, size, emit_signal=True):
+        """Set the editor + line-number gutter font size."""
+        try:
+            size = int(size)
+        except Exception:
+            size = self.default_font_size
+        size = max(self.min_font_size, min(self.max_font_size, size))
+
+        font = QFont(self.font())
+        font.setPointSize(size)
+        font.setFamily("Menlo" if sys.platform == "darwin" else "Monospace")
+        font.setStyleHint(QFont.Monospace)
+        self.setFont(font)
+        self.line_number_area.setFont(font)
+        self.update_line_number_area_width(0)
+        self.line_number_area.update()
+        self.viewport().update()
+        if emit_signal:
+            self.fontSizeChanged.emit(size)
+
+    def current_font_size(self):
+        size = self.font().pointSize()
+        return size if size > 0 else self.default_font_size
+
+    def zoom_in_font(self):
+        self.set_script_font_size(self.current_font_size() + 1)
+
+    def zoom_out_font(self):
+        self.set_script_font_size(self.current_font_size() - 1)
+
+    def reset_font_zoom(self):
+        self.set_script_font_size(self.default_font_size)
+
+    def wheelEvent(self, event):
+        # Standard editor zoom behavior for mouse wheels and Mac trackpad scroll gestures
+        # while Command/Ctrl is held. Normal scrolling remains unchanged.
+        if event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom_in_font()
+            elif delta < 0:
+                self.zoom_out_font()
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def event(self, event):
+        # macOS pinch-to-zoom arrives as a NativeGesture event in Qt when available.
+        try:
+            if event.type() == QEvent.NativeGesture and hasattr(event, "gestureType"):
+                if event.gestureType() == Qt.ZoomNativeGesture:
+                    self._native_zoom_accum += float(event.value())
+                    threshold = 0.15
+                    if abs(self._native_zoom_accum) >= threshold:
+                        steps = min(3, int(abs(self._native_zoom_accum) / threshold))
+                        if self._native_zoom_accum > 0:
+                            for _ in range(steps):
+                                self.zoom_in_font()
+                        else:
+                            for _ in range(steps):
+                                self.zoom_out_font()
+                        self._native_zoom_accum = 0.0
+                    event.accept()
+                    return True
+        except Exception:
+            pass
+        return super().event(event)
+
+    def line_number_area_width(self):
+        digits = len(str(max(1, self.blockCount())))
+        # Extra room leaves space for a visible search-hit stripe on the left.
+        return 18 + self.fontMetrics().horizontalAdvance('9') * digits
+
+    def set_search_match_lines(self, block_numbers, active_block_number=None):
+        """Update gutter markers for search hits. block_numbers are zero-based."""
+        self.search_match_lines = set(block_numbers or [])
+        self.active_search_match_line = active_block_number
+        self.line_number_area.update()
+
+    def update_line_number_area_width(self, _):
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def update_line_number_area(self, rect, dy):
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+
+    def line_number_area_paint_event(self, event):
+        painter = QPainter(self.line_number_area)
+        painter.fillRect(event.rect(), QColor('#010409'))
+
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        bottom = top + int(self.blockBoundingRect(block).height())
+        current_block = self.textCursor().blockNumber()
+        fm_height = self.fontMetrics().height()
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number + 1)
+                row_height = int(self.blockBoundingRect(block).height())
+
+                # Search visibility in the gutter:
+                #   amber = line contains a search hit
+                #   purple = current/selected search hit line
+                if block_number in self.search_match_lines:
+                    match_color = QColor('#6b4b00')
+                    stripe_color = QColor('#d29922')
+                    if block_number == self.active_search_match_line:
+                        match_color = QColor('#4c1d95')
+                        stripe_color = QColor('#d2a8ff')
+                    painter.fillRect(0, top, self.line_number_area.width(), row_height, match_color)
+                    painter.fillRect(0, top, 4, row_height, stripe_color)
+                elif block_number == current_block:
+                    painter.fillRect(0, top, self.line_number_area.width(), row_height, QColor('#0d1117'))
+                    painter.fillRect(0, top, 4, row_height, QColor('#1f6feb'))
+
+                if block_number == current_block or block_number == self.active_search_match_line:
+                    painter.setPen(QColor('#ffffff'))
+                    font = QFont(self.font())
+                    font.setBold(True)
+                    painter.setFont(font)
+                elif block_number in self.search_match_lines:
+                    painter.setPen(QColor('#ffe8a3'))
+                    painter.setFont(self.font())
+                else:
+                    painter.setPen(QColor('#8b949e'))
+                    painter.setFont(self.font())
+                painter.drawText(4, top, self.line_number_area.width() - 9, fm_height, Qt.AlignRight, number)
+
+            block = block.next()
+            top = bottom
+            bottom = top + int(self.blockBoundingRect(block).height())
+            block_number += 1
+
+
+class ZoomableLogTextEdit(QTextEdit):
+    """Read-only log viewer with adjustable monospace font size and Ctrl/Cmd+wheel zoom."""
+
+    fontSizeChanged = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.min_font_size = 8
+        self.max_font_size = 40
+        self.default_font_size = 10
+        self._native_zoom_accum = 0.0
+
+    def set_log_font_size(self, size, emit_signal=True):
+        try:
+            size = int(size)
+        except Exception:
+            size = self.default_font_size
+        size = max(self.min_font_size, min(self.max_font_size, size))
+
+        font = QFont("Menlo" if sys.platform == "darwin" else "Monospace")
+        font.setPointSize(size)
+        font.setStyleHint(QFont.Monospace)
+        self.setFont(font)
+        if emit_signal:
+            self.fontSizeChanged.emit(size)
+
+    def current_font_size(self):
+        size = self.font().pointSize()
+        return size if size > 0 else self.default_font_size
+
+    def zoom_in_font(self):
+        self.set_log_font_size(self.current_font_size() + 1)
+
+    def zoom_out_font(self):
+        self.set_log_font_size(self.current_font_size() - 1)
+
+    def reset_font_zoom(self):
+        self.set_log_font_size(self.default_font_size)
+
+    def wheelEvent(self, event):
+        # Standard macOS/Windows/Linux behavior: hold Command/Ctrl and scroll to zoom.
+        if event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom_in_font()
+            elif delta < 0:
+                self.zoom_out_font()
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def event(self, event):
+        # macOS trackpad pinch support where Qt exposes NativeGesture events.
+        try:
+            if event.type() == QEvent.NativeGesture:
+                value = 0.0
+                if hasattr(event, "value"):
+                    value = float(event.value())
+                self._native_zoom_accum += value
+                if self._native_zoom_accum >= 0.15:
+                    self.zoom_in_font()
+                    self._native_zoom_accum = 0.0
+                    return True
+                if self._native_zoom_accum <= -0.15:
+                    self.zoom_out_font()
+                    self._native_zoom_accum = 0.0
+                    return True
+        except Exception:
+            pass
+        return super().event(event)
+
+
+class FridaLogDisplay(ZoomableLogTextEdit):
+    """Read-only Frida log viewer that emits the double-clicked plain-text line."""
+    lineDoubleClicked = pyqtSignal(str)
+
+    def mouseDoubleClickEvent(self, event):
+        cursor = self.cursorForPosition(event.pos())
+        line = cursor.block().text()
+        if line:
+            self.lineDoubleClicked.emit(line)
+        super().mouseDoubleClickEvent(event)
+
+
 class JSHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -724,7 +1730,7 @@ class ClickableImage(QLabel):
 class Forensics(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Ultimate Forensics Toolbox V1.01 - Jason Peixoto")
+        self.setWindowTitle("Ultimate Forensics Toolbox V1.10 - Jason Peixoto.")
         self.resize(1750, 1000)
         self.setStyle(DepressStyle())
         self.setStyleSheet(self.get_theme())
@@ -736,27 +1742,52 @@ class Forensics(QMainWindow):
         self.path_history = ["/", "/sdcard", "/sdcard/Download", "/data/local/tmp"]
 
         if not os.path.exists(FRIDA_TEMPLATE_FILE):
-            default_template = (
-                "Java.perform(function () {\n"
-                "    console.log('\\n[+] [FRIDA ENGINE] Global Proxy Redirection Script Active!');\n"
-                "    console.log('[+] Target Tunnel Pipeline Route: {ip}:{port}\\n');\n"
-                "    var System = Java.use('java.lang.System');\n"
-                "    var proxy_host = \"{ip}\";\n"
-                "    var proxy_port = \"{port}\";\n\n"
-                "    System.getProperty.overload('java.lang.String').implementation = function (prop) {\n"
-                "        if (prop === 'http.proxyHost' || prop === 'https.proxyHost') {\n"
-                "            console.log('[~] Intercepted getProperty(' + prop + ') -> Routing over custom host proxy!');\n"
-                "            return proxy_host;\n"
-                "        }\n"
-                "        if (prop === 'http.proxyPort' || prop === 'https.proxyPort') {\n"
-                "            console.log('[~] Intercepted getProperty(' + prop + ') -> Routing over custom port proxy!');\n"
-                "            return proxy_port;\n"
-                "        }\n"
-                "        return this.getProperty(prop);\n"
-                "    };\n"
-                "});\n"
-            )
-            with open(FRIDA_TEMPLATE_FILE, 'w') as f: f.write(default_template)
+            default_template = """Java.perform(function () {
+    console.log('
+[+] [FRIDA ENGINE] Java Property Proxy Hook Active!');
+    console.log('[+] Target Tunnel Pipeline Route: {protocol}://{ip}:{port}
+');
+
+    var System = Java.use('java.lang.System');
+    var proxy_host = "{ip}";
+    var proxy_port = "{port}";
+    var proxy_type = String("{protocol}" || "http").toLowerCase().trim();
+    var is_socks = (proxy_type === "socks" || proxy_type === "socks4" || proxy_type === "socks5");
+
+    console.log("[+] Proxy type detected: " + proxy_type + " | socks=" + is_socks);
+
+    function hostProp(prop) { return is_socks ? prop === "socksProxyHost" : (prop === "http.proxyHost" || prop === "https.proxyHost"); }
+    function portProp(prop) { return is_socks ? prop === "socksProxyPort" : (prop === "http.proxyPort" || prop === "https.proxyPort"); }
+
+    System.getProperty.overload('java.lang.String').implementation = function (prop) {
+        prop = String(prop);
+        if (hostProp(prop)) { console.log('[~] Intercepted getProperty(' + prop + ') -> ' + proxy_host); return proxy_host; }
+        if (portProp(prop)) { console.log('[~] Intercepted getProperty(' + prop + ') -> ' + proxy_port); return proxy_port; }
+        return this.getProperty(prop);
+    };
+
+    try {
+        if (is_socks) {
+            System.setProperty("socksProxyHost", proxy_host);
+            System.setProperty("socksProxyPort", proxy_port);
+            System.clearProperty("http.proxyHost");
+            System.clearProperty("http.proxyPort");
+            System.clearProperty("https.proxyHost");
+            System.clearProperty("https.proxyPort");
+        } else {
+            System.setProperty("http.proxyHost", proxy_host);
+            System.setProperty("http.proxyPort", proxy_port);
+            System.setProperty("https.proxyHost", proxy_host);
+            System.setProperty("https.proxyPort", proxy_port);
+            System.clearProperty("socksProxyHost");
+            System.clearProperty("socksProxyPort");
+        }
+    } catch (e) { console.log("[!] Failed to seed Java proxy properties: " + e); }
+
+    console.log("[+] Java property proxy hook is installed.");
+});
+"""
+            with open(FRIDA_TEMPLATE_FILE, 'w', encoding="utf-8") as f: f.write(default_template)
 
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
@@ -775,12 +1806,14 @@ class Forensics(QMainWindow):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
+        self.setup_device_status_tab()
         self.setup_processes_tab()
         self.setup_frida_manager_tab()
         self.setup_frida_logs_tab()
         self.setup_logcat_tab()
         self.setup_file_explorer_tab()
         self.setup_gallery_tab()
+        self.setup_proxy_tab()
         self.setup_adb_tab()
         self.setup_remote_tab()
         self.setup_console_tab()
@@ -791,6 +1824,7 @@ class Forensics(QMainWindow):
         self.update_viewer_ui()
         self.start_logcat_stream()
         self.load_manual_proxies_to_ui()
+        QTimer.singleShot(800, self.refresh_device_status)
 
     def detect_frida_cli_path(self):
         detected = shutil.which("frida") or FRIDA_CLI_PATH
@@ -847,8 +1881,8 @@ class Forensics(QMainWindow):
                   #addBtn { background: #1f6feb; color: white; font-weight: bold; border-radius: 15px; min-width: 30px; }"""
 
     def handle_adb_stdout(self):
-        out_raw = self.adb_process.readAllStandardOutput().data().decode();
-        err_raw = self.adb_process.readAllStandardError().data().decode()
+        out_raw = self.adb_process.readAllStandardOutput().data().decode("utf-8", errors="replace");
+        err_raw = self.adb_process.readAllStandardError().data().decode("utf-8", errors="replace")
         if out_raw:
             self.adb_out.append(out_raw.strip());
             lines = out_raw.splitlines()
@@ -869,6 +1903,192 @@ class Forensics(QMainWindow):
         self.cmd_input.setCurrentIndex(0)
         self.save_settings()
         self.cmd_input.setEditText("")
+
+
+    def setup_device_status_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        summary_box = QGroupBox("Device / Frida Health Check")
+        summary_layout = QVBoxLayout(summary_box)
+
+        top_row = QHBoxLayout()
+        btn_refresh = QPushButton("🔄 Refresh Status")
+        btn_refresh.setObjectName("runBtn")
+        btn_refresh.clicked.connect(self.refresh_device_status)
+
+        btn_copy = QPushButton("📋 Copy Report")
+        btn_copy.clicked.connect(self.copy_device_status_report)
+
+        btn_versions = QPushButton("🧪 Frida Versions")
+        btn_versions.clicked.connect(self.show_frida_versions)
+
+        btn_start = QPushButton("🚀 Start Frida Server")
+        btn_start.setObjectName("runBtn")
+        btn_start.clicked.connect(self.start_frida_server)
+
+        btn_stop = QPushButton("🛑 Stop Frida Server")
+        btn_stop.setObjectName("killBtn")
+        btn_stop.clicked.connect(self.stop_frida_server)
+
+        btn_clear_proxy = QPushButton("🧹 Clear Android Proxy")
+        btn_clear_proxy.clicked.connect(self.clear_android_proxy_from_status)
+
+        self.chk_device_status_auto = QCheckBox("Auto refresh")
+        self.chk_device_status_auto.setStyleSheet("color: white;")
+        self.chk_device_status_auto.toggled.connect(self.toggle_device_status_autorefresh)
+
+        self.device_status_interval_spin = QSpinBox()
+        self.device_status_interval_spin.setRange(5, 300)
+        self.device_status_interval_spin.setValue(30)
+        self.device_status_interval_spin.setSuffix(" sec")
+        self.device_status_interval_spin.valueChanged.connect(self.update_device_status_timer_interval)
+
+        top_row.addWidget(btn_refresh)
+        top_row.addWidget(btn_copy)
+        top_row.addWidget(btn_versions)
+        top_row.addSpacing(16)
+        top_row.addWidget(btn_start)
+        top_row.addWidget(btn_stop)
+        top_row.addWidget(btn_clear_proxy)
+        top_row.addStretch(1)
+        top_row.addWidget(self.chk_device_status_auto)
+        top_row.addWidget(self.device_status_interval_spin)
+        summary_layout.addLayout(top_row)
+
+        self.device_status_banner = QLabel("Status has not been refreshed yet.")
+        self.device_status_banner.setStyleSheet("color: #8b949e; padding: 6px;")
+        summary_layout.addWidget(self.device_status_banner)
+
+        self.device_status_table = QTableWidget(0, 4)
+        self.device_status_table.setHorizontalHeaderLabels(["Check", "State", "Details", "Time"])
+        self.device_status_table.verticalHeader().setVisible(False)
+        self.device_status_table.setAlternatingRowColors(True)
+        self.device_status_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.device_status_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.device_status_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.device_status_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.device_status_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.device_status_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        summary_layout.addWidget(self.device_status_table, 1)
+
+        layout.addWidget(summary_box, 3)
+
+        log_box = QGroupBox("Health Check Log")
+        log_layout = QVBoxLayout(log_box)
+        self.device_status_log = QTextEdit()
+        self.device_status_log.setReadOnly(True)
+        self.device_status_log.setFont(QFont("Monospace", 10))
+        self.device_status_log.setStyleSheet("background: #010409; color: #d1d5da;")
+        log_layout.addWidget(self.device_status_log)
+        layout.addWidget(log_box, 1)
+
+        self.device_status_records = []
+        self.device_status_timer = QTimer(self)
+        self.device_status_timer.timeout.connect(self.refresh_device_status)
+
+        self.tabs.addTab(tab, "🩺 Device Status")
+
+    def refresh_device_status(self):
+        if hasattr(self, "device_status_worker") and self.device_status_worker.isRunning():
+            self.append_device_status_log("Refresh already running; ignoring duplicate request.", "#ffa657")
+            return
+
+        self.device_status_records = []
+        self.device_status_table.setRowCount(0)
+        self.device_status_banner.setText("Refreshing device status...")
+        self.device_status_banner.setStyleSheet("color: #58a6ff; padding: 6px;")
+
+        target_pkg = ""
+        try:
+            if hasattr(self, "target_pkg"):
+                target_pkg = self.target_pkg.currentText().strip()
+            if not target_pkg and hasattr(self, "app_selector"):
+                target_pkg = self.app_selector.currentText().strip()
+        except Exception:
+            target_pkg = ""
+
+        cli_path = FRIDA_CLI_PATH
+        try:
+            if hasattr(self, "frida_cli_path"):
+                cli_path = self.frida_cli_path.text().strip() or FRIDA_CLI_PATH
+        except Exception:
+            pass
+
+        self.device_status_worker = DeviceStatusWorker(target_pkg=target_pkg, frida_cli_path=cli_path)
+        self.device_status_worker.row_signal.connect(self.add_device_status_row)
+        self.device_status_worker.log_signal.connect(self.append_device_status_log)
+        self.device_status_worker.done_signal.connect(self.device_status_refresh_done)
+        self.device_status_worker.start()
+
+    def add_device_status_row(self, check, state, detail, color):
+        ts = time.strftime("%H:%M:%S")
+        self.device_status_records.append((check, state, detail, ts))
+
+        row = self.device_status_table.rowCount()
+        self.device_status_table.insertRow(row)
+        values = [check, state, detail, ts]
+        for col, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            item.setForeground(QColor(color))
+            if col in (0, 1):
+                item.setFont(QFont("Arial", weight=QFont.Bold))
+            self.device_status_table.setItem(row, col, item)
+        self.device_status_table.scrollToBottom()
+
+    def append_device_status_log(self, message, color="#c9d1d9"):
+        safe_message = html.escape(str(message), quote=False)
+        line = f"<font color='{color}'>[{time.strftime('%H:%M:%S')}] {safe_message}</font>"
+        try:
+            self.device_status_log.append(line)
+            self.device_status_log.moveCursor(QTextCursor.End)
+        except Exception:
+            pass
+
+    def device_status_refresh_done(self):
+        ok_count = sum(1 for _, state, _, _ in getattr(self, "device_status_records", []) if str(state).upper() == "OK")
+        warn_count = sum(1 for _, state, _, _ in getattr(self, "device_status_records", []) if str(state).upper() == "WARN")
+        fail_count = sum(1 for _, state, _, _ in getattr(self, "device_status_records", []) if str(state).upper() == "FAIL")
+        info_count = sum(1 for _, state, _, _ in getattr(self, "device_status_records", []) if str(state).upper() == "INFO")
+
+        if fail_count:
+            color = "#ff7b72"
+        elif warn_count:
+            color = "#ffa657"
+        else:
+            color = "#7ee787"
+
+        self.device_status_banner.setText(f"Last refresh complete: OK={ok_count}, WARN={warn_count}, FAIL={fail_count}, INFO={info_count}")
+        self.device_status_banner.setStyleSheet(f"color: {color}; padding: 6px;")
+
+    def toggle_device_status_autorefresh(self, enabled):
+        if enabled:
+            self.device_status_timer.start(self.device_status_interval_spin.value() * 1000)
+            self.append_device_status_log("Auto refresh enabled.", "#58a6ff")
+        else:
+            self.device_status_timer.stop()
+            self.append_device_status_log("Auto refresh disabled.", "#8b949e")
+
+    def update_device_status_timer_interval(self):
+        if hasattr(self, "device_status_timer") and self.device_status_timer.isActive():
+            self.device_status_timer.start(self.device_status_interval_spin.value() * 1000)
+
+    def copy_device_status_report(self):
+        records = getattr(self, "device_status_records", [])
+        if not records:
+            QApplication.clipboard().setText("No device status report available yet.")
+            return
+        lines = ["Ultimate Forensics Toolbox Device Status Report", time.strftime("Generated: %Y-%m-%d %H:%M:%S"), ""]
+        for check, state, detail, ts in records:
+            lines.append(f"[{ts}] {check}: {state} - {detail}")
+        QApplication.clipboard().setText("\n".join(lines))
+        self.append_device_status_log("Copied device status report to clipboard.", "#7ee787")
+
+    def clear_android_proxy_from_status(self):
+        self.append_device_status_log("Clearing Android global http_proxy...", "#58a6ff")
+        self.run_adb_cmd(f"{ADB_PATH} shell settings put global http_proxy :0")
+        QTimer.singleShot(700, lambda: self.run_adb_cmd(f"{ADB_PATH} shell settings delete global http_proxy"))
+        QTimer.singleShot(1500, self.refresh_device_status)
 
     def setup_processes_tab(self):
         tab = QWidget();
@@ -894,13 +2114,16 @@ class Forensics(QMainWindow):
         tab = QWidget();
         layout = QHBoxLayout(tab)
         self.f_model = QFileSystemModel();
-        self.f_model.setRootPath(BASE_DIR);
+        self.f_model.setRootPath(FRIDA_SCRIPTS_DIR);
         self.f_model.setReadOnly(False)
-        self.f_model.setNameFilters(["Global_Vault", "Projects", "*.js"]);
+        # Keep the Frida Manager isolated to ~/.jpeixoto/UltimateForensicsToolbox/FridaScripts.
+        # This shows folders plus JavaScript files only; other toolbox folders/files stay hidden.
+        self.f_model.setFilter(QDir.AllDirs | QDir.NoDotAndDotDot | QDir.Files)
+        self.f_model.setNameFilters(["*.js"]);
         self.f_model.setNameFilterDisables(False)
         self.f_tree = QTreeView();
         self.f_tree.setModel(self.f_model);
-        self.f_tree.setRootIndex(self.f_model.index(BASE_DIR))
+        self.f_tree.setRootIndex(self.f_model.index(FRIDA_SCRIPTS_DIR))
         self.f_tree.setHeaderHidden(False);
         self.f_tree.header().setSectionResizeMode(0, QHeaderView.Interactive)
         for i in range(1, 4): self.f_tree.setColumnHidden(i, True)
@@ -911,19 +2134,108 @@ class Forensics(QMainWindow):
 
         r_box = QVBoxLayout();
         tools = QHBoxLayout()
-        btn_proj = QPushButton("📁 Project");
+        btn_proj = QPushButton("📁 Folder");
         btn_proj.clicked.connect(self.create_new_project)
         btn_s = QPushButton("💾 Save");
         btn_s.clicked.connect(self.save_script)
+        btn_save_as = QPushButton("💾 Save As");
+        btn_save_as.clicked.connect(self.save_script_as)
+        btn_reload = QPushButton("↻ Reload");
+        btn_reload.clicked.connect(self.reload_current_script)
         btn_b = QPushButton("✨ Beautify");
         btn_b.clicked.connect(self.beautify_code)
+        btn_validate = QPushButton("✅ Validate")
+        btn_validate.setToolTip("Check JavaScript syntax, Frida 17 compatibility, and Python API compile/bundle issues before injection — Cmd/Ctrl+Shift+K")
+        btn_validate.clicked.connect(self.validate_current_script)
+
+        self.editor_font_spin = QSpinBox()
+        self.editor_font_spin.setRange(8, 40)
+        self.editor_font_spin.setValue(12)
+        self.editor_font_spin.setSuffix(" pt")
+        self.editor_font_spin.setToolTip("Editor font size. You can also use Cmd/Ctrl + mouse wheel or trackpad pinch.")
+
+        btn_font_down = QPushButton("A−")
+        btn_font_down.setToolTip("Decrease editor font size — Cmd/Ctrl -")
+        btn_font_down.clicked.connect(self.editor_zoom_out)
+
+        btn_font_up = QPushButton("A+")
+        btn_font_up.setToolTip("Increase editor font size — Cmd/Ctrl +")
+        btn_font_up.clicked.connect(self.editor_zoom_in)
+
+        btn_font_reset = QPushButton("A0")
+        btn_font_reset.setToolTip("Reset editor font size — Cmd/Ctrl 0")
+        btn_font_reset.clicked.connect(self.editor_zoom_reset)
+
         tools.addWidget(btn_proj);
         tools.addWidget(btn_s);
+        tools.addWidget(btn_save_as);
+        tools.addWidget(btn_reload);
         tools.addWidget(btn_b);
+        tools.addWidget(btn_validate);
+        tools.addStretch()
+        tools.addWidget(QLabel("Font:"))
+        tools.addWidget(btn_font_down)
+        tools.addWidget(self.editor_font_spin)
+        tools.addWidget(btn_font_up)
+        tools.addWidget(btn_font_reset)
         r_box.addLayout(tools)
-        self.editor = QTextEdit();
+
+        editor_search_row = QHBoxLayout()
+        self.editor_find_input = QLineEdit()
+        self.editor_find_input.setPlaceholderText("Find in script...  Ctrl+F")
+        self.editor_find_input.textChanged.connect(lambda _=None: self.refresh_editor_search_highlights(reset=True))
+        self.editor_replace_input = QLineEdit()
+        self.editor_replace_input.setPlaceholderText("Replace with...  Ctrl+H")
+        self.editor_case_chk = QCheckBox("Case")
+        self.editor_regex_chk = QCheckBox("Regex")
+        self.editor_word_chk = QCheckBox("Whole word")
+        self.editor_highlight_chk = QCheckBox("Highlight all")
+        self.editor_highlight_chk.setChecked(True)
+        for chk in [self.editor_case_chk, self.editor_regex_chk, self.editor_word_chk, self.editor_highlight_chk]:
+            chk.setStyleSheet("color: #c9d1d9;")
+            chk.toggled.connect(lambda _=None: self.refresh_editor_search_highlights(reset=True))
+
+        btn_find_prev = QPushButton("↑ Prev")
+        btn_find_prev.clicked.connect(lambda: self.editor_find_next(backward=True))
+        btn_find_next = QPushButton("↓ Next")
+        btn_find_next.clicked.connect(lambda: self.editor_find_next(backward=False))
+        btn_replace = QPushButton("Replace")
+        btn_replace.clicked.connect(self.editor_replace_one)
+        btn_replace_all = QPushButton("Replace All")
+        btn_replace_all.clicked.connect(self.editor_replace_all)
+        btn_go_line = QPushButton("Go Line")
+        btn_go_line.clicked.connect(self.editor_go_to_line)
+
+        editor_search_row.addWidget(QLabel("Find:"))
+        editor_search_row.addWidget(self.editor_find_input, 2)
+        editor_search_row.addWidget(QLabel("Replace:"))
+        editor_search_row.addWidget(self.editor_replace_input, 2)
+        editor_search_row.addWidget(btn_find_prev)
+        editor_search_row.addWidget(btn_find_next)
+        editor_search_row.addWidget(btn_replace)
+        editor_search_row.addWidget(btn_replace_all)
+        editor_search_row.addWidget(btn_go_line)
+        editor_search_row.addWidget(self.editor_case_chk)
+        editor_search_row.addWidget(self.editor_regex_chk)
+        editor_search_row.addWidget(self.editor_word_chk)
+        editor_search_row.addWidget(self.editor_highlight_chk)
+        r_box.addLayout(editor_search_row)
+
+        self.editor = FridaScriptEditor();
+        self.editor.set_script_font_size(self.editor_font_spin.value(), emit_signal=False)
+        self.editor.fontSizeChanged.connect(self.on_editor_font_size_changed)
+        self.editor_font_spin.valueChanged.connect(self.on_editor_font_spin_changed)
+        self.editor.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.editor.cursorPositionChanged.connect(self.update_editor_status)
+        self.editor.textChanged.connect(lambda: self.refresh_editor_search_highlights(reset=False, quiet=True))
+        self.editor.document().modificationChanged.connect(lambda _=None: self.update_editor_status())
         self.highlighter = JSHighlighter(self.editor.document());
         r_box.addWidget(self.editor)
+
+        self.editor_status = QLabel("Line 1, Col 1 | Ready")
+        self.editor_status.setStyleSheet("color: #8b949e; padding: 3px;")
+        r_box.addWidget(self.editor_status)
+        self.setup_frida_editor_shortcuts()
 
         self.target_pkg = QComboBox();
         self.target_pkg.setEditable(True)
@@ -965,7 +2277,641 @@ class Forensics(QMainWindow):
         btns.addWidget(sb);
         r_box.addLayout(btns);
         layout.addLayout(r_box, 3)
+        self.frida_manager_tab = tab
         self.tabs.addTab(tab, "🛠️ Frida Manager")
+
+    def setup_frida_editor_shortcuts(self):
+        shortcuts = [
+            ("Ctrl+F", lambda: self.editor_find_input.setFocus() if hasattr(self, "editor_find_input") else None),
+            ("Ctrl+H", lambda: self.editor_replace_input.setFocus() if hasattr(self, "editor_replace_input") else None),
+            ("F3", lambda: self.editor_find_next(backward=False)),
+            ("Shift+F3", lambda: self.editor_find_next(backward=True)),
+            ("Ctrl+G", self.editor_go_to_line),
+            ("Ctrl+S", self.save_script),
+            ("Ctrl+Shift+K", self.validate_current_script),
+            ("Meta+Shift+K", self.validate_current_script),
+            ("Ctrl++", self.editor_zoom_in),
+            ("Ctrl+=", self.editor_zoom_in),
+            ("Ctrl+-", self.editor_zoom_out),
+            ("Ctrl+0", self.editor_zoom_reset),
+            ("Meta++", self.editor_zoom_in),
+            ("Meta+=", self.editor_zoom_in),
+            ("Meta+-", self.editor_zoom_out),
+            ("Meta+0", self.editor_zoom_reset),
+        ]
+        for key, callback in shortcuts:
+            action = QAction(self)
+            action.setShortcut(key)
+            action.triggered.connect(callback)
+            self.addAction(action)
+
+    def on_editor_font_spin_changed(self, size):
+        if hasattr(self, "editor"):
+            self.editor.set_script_font_size(size)
+        self.save_settings()
+        self.update_editor_status()
+
+    def on_editor_font_size_changed(self, size):
+        if hasattr(self, "editor_font_spin") and self.editor_font_spin.value() != size:
+            self.editor_font_spin.blockSignals(True)
+            self.editor_font_spin.setValue(size)
+            self.editor_font_spin.blockSignals(False)
+        self.save_settings()
+        self.update_editor_status()
+
+    def editor_zoom_in(self):
+        if hasattr(self, "editor"):
+            self.editor.zoom_in_font()
+
+    def editor_zoom_out(self):
+        if hasattr(self, "editor"):
+            self.editor.zoom_out_font()
+
+    def editor_zoom_reset(self):
+        if hasattr(self, "editor"):
+            self.editor.reset_font_zoom()
+
+    def set_log_view_font_size(self, view_name, size):
+        """Apply and persist font size for Frida Logs, LogCat, or ADB Console."""
+        widget_map = {
+            "frida": "frida_display",
+            "logcat": "log_display",
+            "adb_console": "console",
+        }
+        attr = widget_map.get(view_name)
+        widget = getattr(self, attr, None) if attr else None
+        if widget and hasattr(widget, "set_log_font_size"):
+            widget.set_log_font_size(size)
+        self.save_settings()
+
+    def _sync_log_font_spin(self, spin_attr, size):
+        spin = getattr(self, spin_attr, None)
+        if spin and spin.value() != size:
+            spin.blockSignals(True)
+            spin.setValue(size)
+            spin.blockSignals(False)
+        self.save_settings()
+
+    def on_frida_log_font_size_changed(self, size):
+        self._sync_log_font_spin("frida_log_font_spin", size)
+
+    def on_logcat_font_size_changed(self, size):
+        self._sync_log_font_spin("logcat_font_spin", size)
+
+    def on_adb_console_font_size_changed(self, size):
+        self._sync_log_font_spin("adb_console_font_spin", size)
+
+    def editor_search_pattern(self):
+        if not hasattr(self, "editor_find_input"):
+            return None, ""
+        needle = self.editor_find_input.text()
+        if not needle:
+            return None, ""
+
+        pattern = needle if self.editor_regex_chk.isChecked() else re.escape(needle)
+        if self.editor_word_chk.isChecked():
+            pattern = r"\b(?:" + pattern + r")\b"
+        flags = 0 if self.editor_case_chk.isChecked() else re.IGNORECASE
+
+        try:
+            return re.compile(pattern, flags), ""
+        except re.error as e:
+            return None, f"Regex error: {e}"
+
+    def editor_search_matches(self):
+        regex, error = self.editor_search_pattern()
+        if error:
+            return [], error
+        if regex is None:
+            return [], ""
+        text = self.editor.toPlainText()
+        matches = []
+        for match in regex.finditer(text):
+            # Avoid zero-length regex loops/highlights that make replacement unsafe.
+            if match.end() > match.start():
+                matches.append(match)
+        return matches, ""
+
+    def refresh_editor_search_highlights(self, reset=False, quiet=False):
+        if not hasattr(self, "editor") or not hasattr(self, "editor_find_input"):
+            return
+
+        matches, error = self.editor_search_matches()
+        selections = []
+
+        if error:
+            self.editor.setExtraSelections([])
+            if hasattr(self.editor, "set_search_match_lines"):
+                self.editor.set_search_match_lines(set(), None)
+            if not quiet:
+                self.update_editor_status(error)
+            return
+
+        active_match_line = None
+        match_lines = set()
+        if self.editor_find_input.text():
+            doc = self.editor.document()
+            for match in matches:
+                block = doc.findBlock(match.start())
+                if block.isValid():
+                    match_lines.add(block.blockNumber())
+
+            cursor_now = self.editor.textCursor()
+            active_idx = self.editor_current_match_index(
+                matches,
+                cursor_now.selectionStart(),
+                cursor_now.selectionEnd()
+            )
+            if active_idx >= 0:
+                active_block = doc.findBlock(matches[active_idx].start())
+                if active_block.isValid():
+                    active_match_line = active_block.blockNumber()
+
+        if hasattr(self.editor, "set_search_match_lines"):
+            self.editor.set_search_match_lines(match_lines, active_match_line)
+
+        if self.editor_find_input.text() and self.editor_highlight_chk.isChecked():
+            fmt = QTextCharFormat()
+            fmt.setBackground(QColor("#3a3f4b"))
+            fmt.setForeground(QColor("#ffffff"))
+
+            # Keep highlighting responsive even on very large scripts.
+            for match in matches[:1000]:
+                cursor = QTextCursor(self.editor.document())
+                cursor.setPosition(match.start())
+                cursor.setPosition(match.end(), QTextCursor.KeepAnchor)
+                sel = QTextEdit.ExtraSelection()
+                sel.cursor = cursor
+                sel.format = fmt
+                selections.append(sel)
+
+        self.editor.setExtraSelections(selections)
+        self.update_editor_status()
+
+    def update_editor_status(self, message=None):
+        if not hasattr(self, "editor_status") or not hasattr(self, "editor"):
+            return
+        cursor = self.editor.textCursor()
+        line = cursor.blockNumber() + 1
+        col = cursor.positionInBlock() + 1
+        total_lines = self.editor.document().blockCount()
+        modified = "*" if self.editor.document().isModified() else ""
+
+        if message is None:
+            matches, error = self.editor_search_matches() if hasattr(self, "editor_find_input") else ([], "")
+            if error:
+                message = error
+            elif hasattr(self, "editor_find_input") and self.editor_find_input.text():
+                current = self.editor_current_match_index(matches, cursor.selectionStart(), cursor.selectionEnd())
+                if current >= 0:
+                    message = f"Match {current + 1}/{len(matches)}"
+                else:
+                    message = f"{len(matches)} match(es)"
+            else:
+                message = "Ready"
+
+        path = os.path.basename(self.current_file_path) if self.current_file_path else "Unsaved script"
+        font_size = self.editor.current_font_size() if hasattr(self.editor, "current_font_size") else self.editor.font().pointSize()
+        self.editor_status.setText(f"{path}{modified} | Line {line}/{total_lines}, Col {col} | Font {font_size} pt | {message}")
+
+    def editor_current_match_index(self, matches, start, end):
+        for idx, match in enumerate(matches):
+            if match.start() == start and match.end() == end:
+                return idx
+        return -1
+
+    def select_editor_range(self, start, end):
+        cursor = QTextCursor(self.editor.document())
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        self.editor.setTextCursor(cursor)
+        self.editor.ensureCursorVisible()
+        self.refresh_editor_search_highlights(reset=False)
+
+    def editor_find_next(self, backward=False):
+        if not hasattr(self, "editor"):
+            return
+        if not self.editor_find_input.text():
+            self.editor_find_input.setFocus()
+            return
+
+        matches, error = self.editor_search_matches()
+        if error:
+            self.update_editor_status(error)
+            return
+        if not matches:
+            self.update_editor_status("No matches")
+            return
+
+        cursor = self.editor.textCursor()
+        if backward:
+            pos = cursor.selectionStart() if cursor.hasSelection() else cursor.position()
+            prior = [m for m in matches if m.start() < pos]
+            match = prior[-1] if prior else matches[-1]
+        else:
+            pos = cursor.selectionEnd() if cursor.hasSelection() else cursor.position()
+            later = [m for m in matches if m.start() >= pos]
+            match = later[0] if later else matches[0]
+
+        self.select_editor_range(match.start(), match.end())
+
+    def editor_replace_one(self):
+        if not hasattr(self, "editor"):
+            return
+        matches, error = self.editor_search_matches()
+        if error:
+            self.update_editor_status(error)
+            return
+        if not matches:
+            self.editor_find_next(backward=False)
+            return
+
+        cursor = self.editor.textCursor()
+        idx = self.editor_current_match_index(matches, cursor.selectionStart(), cursor.selectionEnd())
+        if idx < 0:
+            self.editor_find_next(backward=False)
+            return
+
+        match = matches[idx]
+        replacement_raw = self.editor_replace_input.text()
+        try:
+            replacement = match.expand(replacement_raw) if self.editor_regex_chk.isChecked() else replacement_raw
+        except re.error as e:
+            self.update_editor_status(f"Replacement error: {e}")
+            return
+
+        cursor.beginEditBlock()
+        cursor.insertText(replacement)
+        cursor.endEditBlock()
+        self.refresh_editor_search_highlights(reset=False)
+        self.editor_find_next(backward=False)
+
+    def editor_replace_all(self):
+        if not hasattr(self, "editor"):
+            return
+        regex, error = self.editor_search_pattern()
+        if error:
+            self.update_editor_status(error)
+            return
+        if regex is None:
+            self.editor_find_input.setFocus()
+            return
+
+        text = self.editor.toPlainText()
+        replacement = self.editor_replace_input.text()
+        try:
+            new_text, count = regex.subn(replacement, text)
+        except re.error as e:
+            self.update_editor_status(f"Replacement error: {e}")
+            return
+
+        if count == 0:
+            self.update_editor_status("No matches to replace")
+            return
+
+        cursor_pos = self.editor.textCursor().position()
+        self.editor.blockSignals(True)
+        self.editor.setPlainText(new_text)
+        self.editor.blockSignals(False)
+        cursor = QTextCursor(self.editor.document())
+        cursor.setPosition(min(cursor_pos, len(new_text)))
+        self.editor.setTextCursor(cursor)
+        self.editor.document().setModified(True)
+        self.refresh_editor_search_highlights(reset=True)
+        self.update_editor_status(f"Replaced {count} occurrence(s)")
+        self.route_frida_log("SYSTEM", f"Editor Replace All completed: {count} occurrence(s) replaced.")
+
+    def editor_go_to_line(self):
+        if not hasattr(self, "editor"):
+            return
+        max_line = max(1, self.editor.document().blockCount())
+        current_line = self.editor.textCursor().blockNumber() + 1
+        line, ok = QInputDialog.getInt(self, "Go To Line", "Line number:", current_line, 1, max_line)
+        if not ok:
+            return
+        self.jump_editor_to_line(line, 1)
+
+    def jump_editor_to_line(self, line, col=1, status_message=None):
+        if not hasattr(self, "editor"):
+            return False
+
+        max_line = max(1, self.editor.document().blockCount())
+        line = max(1, min(int(line), max_line))
+        col = max(1, int(col or 1))
+
+        block = self.editor.document().findBlockByNumber(line - 1)
+        if not block.isValid():
+            return False
+
+        max_col_offset = max(0, block.length() - 1)
+        pos = block.position() + min(col - 1, max_col_offset)
+        cursor = QTextCursor(block)
+        cursor.setPosition(pos)
+        self.editor.setTextCursor(cursor)
+        self.editor.ensureCursorVisible()
+        self.editor.setFocus()
+
+        if hasattr(self, "tabs") and hasattr(self, "frida_manager_tab"):
+            self.tabs.setCurrentWidget(self.frida_manager_tab)
+
+        self.update_editor_status(status_message or f"Jumped to line {line}, col {col}")
+        return True
+
+    def editor_line_col_from_position(self, position):
+        """Return 1-based line/column for a document character offset."""
+        if not hasattr(self, "editor"):
+            return 1, 1
+        block = self.editor.document().findBlock(int(max(0, position)))
+        if not block.isValid():
+            return 1, 1
+        return block.blockNumber() + 1, int(max(0, position - block.position())) + 1
+
+    def find_node_binary(self):
+        """Find node for JavaScript syntax checking."""
+        candidates = [
+            shutil.which("node"),
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "/usr/bin/node",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def run_node_syntax_check(self, code):
+        """
+        Run a syntax-only JavaScript parse through Node.
+        This does not execute Frida APIs; it only catches JS parse errors.
+        """
+        node = self.find_node_binary()
+        if not node:
+            return {
+                "ok": None,
+                "message": "Node.js was not found. Install with: brew install node. Skipping syntax-only parse check.",
+                "line": None,
+                "col": None,
+            }
+
+        tmp_path = None
+        try:
+            fd, tmp_path = tempfile.mkstemp(prefix="uft_frida_syntax_", suffix=".mjs")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(code or "")
+
+            result = subprocess.run(
+                [node, "--check", tmp_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+            )
+            output = (result.stdout or "").strip()
+            if result.returncode == 0:
+                return {"ok": True, "message": f"JavaScript syntax OK using {node}.", "line": None, "col": None}
+
+            # Node commonly prints: /tmp/file.mjs:12
+            line = None
+            col = None
+            m = re.search(re.escape(tmp_path) + r":(?P<line>\d+)(?::(?P<col>\d+))?", output)
+            if not m:
+                m = re.search(r"\.mjs:(?P<line>\d+)(?::(?P<col>\d+))?", output)
+            if m:
+                line = int(m.group("line"))
+                col = int(m.group("col") or 1)
+            else:
+                # Fallback: estimate column from caret line if present.
+                lines = output.splitlines()
+                for i, out_line in enumerate(lines):
+                    if tmp_path in out_line and i + 2 < len(lines) and "^" in lines[i + 2]:
+                        line_match = re.search(r":(\d+)", out_line)
+                        if line_match:
+                            line = int(line_match.group(1))
+                            col = lines[i + 2].find("^") + 1
+                            break
+
+            return {"ok": False, "message": output or "Node syntax check failed.", "line": line, "col": col or 1}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "message": "Node syntax check timed out.", "line": None, "col": None}
+        except Exception as e:
+            return {"ok": None, "message": f"Node syntax check could not run: {str(e)}", "line": None, "col": None}
+        finally:
+            if tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+    def frida17_static_checks(self, code):
+        """Return warnings/errors for common Frida 16 -> 17 script breakages."""
+        checks = []
+        patterns = [
+            (
+                r"\bModule\.findExportByName\s*\(",
+                "WARN",
+                "Frida 17 removed static Module.findExportByName(). Use Module.findGlobalExportByName(name) for global/null exports, or Process.findModuleByName(lib).findExportByName(name).",
+            ),
+            (
+                r"\bModule\.getExportByName\s*\(",
+                "WARN",
+                "Frida 17 removed static Module.getExportByName(). Use Module.getGlobalExportByName(name) or Process.getModuleByName(lib).getExportByName(name).",
+            ),
+            (
+                r"\bModule\.enumerateSymbolsSync\s*\(",
+                "WARN",
+                "Frida 17 removed old static symbol enumeration. Use Process.findModuleByName(lib).enumerateSymbols().",
+            ),
+            (
+                r"\bModule\.enumerateExportsSync\s*\(",
+                "WARN",
+                "Frida 17 removed old static export enumeration. Use Process.findModuleByName(lib).enumerateExports().",
+            ),
+            (
+                r"\bMemory\.(readCString|readUtf8String|readByteArray|readU8|readU16|readU32|readPointer)\s*\(",
+                "WARN",
+                "Frida 17 removed old Memory.read* helpers. Use pointer methods such as args[0].readCString(), ptr.readByteArray(size), ptr.readU8(), etc.",
+            ),
+            (
+                r"\bInterceptor\.attach\s*\(\s*null\b",
+                "ERROR",
+                "Interceptor.attach(null, ...) will fail. Check the export/module lookup before attaching.",
+            ),
+        ]
+
+        for pattern, level, message in patterns:
+            try:
+                for match in re.finditer(pattern, code or ""):
+                    line, col = self.editor_line_col_from_position(match.start())
+                    checks.append({"level": level, "line": line, "col": col, "message": message})
+            except re.error:
+                pass
+
+        if re.search(r"\bJava\b", code or ""):
+            checks.append({
+                "level": "INFO",
+                "line": 1,
+                "col": 1,
+                "message": "This script references Java. Python API mode will compile/bundle frida-java-bridge; CLI mode already bundles Java compatibility.",
+            })
+
+        return checks
+
+    def python_api_compile_check(self, code):
+        """Compile the same wrapped/bundled agent that Python API mode will inject."""
+        try:
+            needs_java = re.search(r"\bJava\b", code or "") is not None
+            if not needs_java:
+                return {"ok": True, "message": "Python API compile check skipped: no Java bridge import needed for this script."}
+
+            worker = FridaWorker("__validation__", code or "", FRIDA_INJECTION_MODE_PYTHON, self.frida_cli_path.text().strip() if hasattr(self, "frida_cli_path") else FRIDA_CLI_PATH)
+            worker.log_signal.connect(self.route_frida_log)
+            wrapped = worker._wrap_script_for_python_api(code or "")
+            bundle = worker._build_python_api_agent_source(wrapped, needs_java)
+            if bundle is None:
+                return {"ok": False, "message": "Python API frida-java-bridge compile failed. See log lines above."}
+            return {"ok": True, "message": "Python API frida-java-bridge bundle compiled successfully."}
+        except Exception as e:
+            return {"ok": False, "message": f"Python API compile check failed: {str(e)}"}
+
+    def validate_current_script(self):
+        """Validate the current Frida editor buffer before injection."""
+        if not hasattr(self, "editor"):
+            return
+
+        code = self.editor.toPlainText()
+        self.tabs.setCurrentIndex(2)  # Frida Logs
+        self.route_frida_log("SYSTEM", "Script validation started. This checks syntax/static compatibility; it does not execute hooks.")
+
+        if not code.strip():
+            self.route_frida_log("ERROR", "Validation failed: editor is empty.")
+            self.update_editor_status("Validation failed: empty script")
+            return
+
+        failures = 0
+        warnings = 0
+        first_jump = None
+
+        syntax = self.run_node_syntax_check(code)
+        if syntax["ok"] is True:
+            self.route_frida_log("SCRIPT", "✅ " + syntax["message"])
+        elif syntax["ok"] is False:
+            failures += 1
+            location = ""
+            if syntax.get("line"):
+                location = f" at editor:{syntax['line']}:{syntax.get('col') or 1}"
+                first_jump = first_jump or (syntax["line"], syntax.get("col") or 1)
+            self.route_frida_log("ERROR", "JavaScript syntax check failed" + location + ": " + syntax["message"])
+        else:
+            warnings += 1
+            self.route_frida_log("WARN", syntax["message"])
+
+        for check in self.frida17_static_checks(code):
+            level = check["level"]
+            if level == "ERROR":
+                failures += 1
+                first_jump = first_jump or (check["line"], check["col"])
+            elif level == "WARN":
+                warnings += 1
+            self.route_frida_log(level, f"Frida static check editor:{check['line']}:{check['col']} - {check['message']}")
+
+        mode = self.frida_injection_mode.currentData() if hasattr(self, "frida_injection_mode") else FRIDA_INJECTION_MODE_CLI
+        if mode == FRIDA_INJECTION_MODE_PYTHON:
+            compile_result = self.python_api_compile_check(code)
+            if compile_result["ok"]:
+                self.route_frida_log("SCRIPT", "✅ " + compile_result["message"])
+            else:
+                failures += 1
+                self.route_frida_log("ERROR", compile_result["message"])
+        else:
+            self.route_frida_log("SCRIPT", "CLI mode selected: syntax/static checks completed. CLI runtime test occurs when you inject.")
+
+        if first_jump:
+            self.jump_editor_to_line(first_jump[0], first_jump[1], "Validation issue")
+
+        if failures == 0:
+            if warnings:
+                self.route_frida_log("WARN", f"Validation completed with {warnings} warning(s). Script may still fail at runtime if a module/symbol is not loaded yet.")
+                self.update_editor_status(f"Validation warnings: {warnings}")
+            else:
+                self.route_frida_log("SYSTEM", "✅ Validation passed. Runtime-only failures are still possible if symbols/classes are unavailable in the target app.")
+                self.update_editor_status("Validation passed")
+        else:
+            self.route_frida_log("ERROR", f"Validation failed with {failures} error(s) and {warnings} warning(s).")
+            self.update_editor_status(f"Validation failed: {failures} error(s)")
+
+    def extract_script_location_from_log_line(self, line):
+        # Handles Frida locations such as:
+        #   (/script1.js:58)
+        #   (/script1.js:58:12)
+        #   at foo (/agent/index.js:58:12)
+        pattern = re.compile(r"(?P<file>/?[^()\s:]+\.js):(?P<line>\d+)(?::(?P<col>\d+))?")
+        matches = list(pattern.finditer(str(line or "")))
+        if not matches:
+            return None
+
+        # Prefer the first real JS frame and avoid generated/eval locations when possible.
+        preferred = None
+        for match in matches:
+            file_name = match.group("file")
+            if "eval" not in file_name.lower():
+                preferred = match
+                break
+        if preferred is None:
+            preferred = matches[0]
+
+        return {
+            "file": preferred.group("file"),
+            "line": int(preferred.group("line")),
+            "col": int(preferred.group("col") or 1),
+        }
+
+    def handle_frida_log_double_click(self, line):
+        loc = self.extract_script_location_from_log_line(line)
+        if not loc:
+            self.route_frida_log("SYSTEM", "Double-clicked log line has no JavaScript file:line location.")
+            return
+
+        ok = self.jump_editor_to_line(
+            loc["line"],
+            loc["col"],
+            f"Jumped from Frida log {loc['file']}:{loc['line']}:{loc['col']}"
+        )
+        if ok:
+            self.route_frida_log("SYSTEM", f"Jumped to editor line {loc['line']}, col {loc['col']} from {loc['file']}.")
+        else:
+            self.route_frida_log("WARN", f"Could not jump to {loc['file']}:{loc['line']}:{loc['col']}.")
+
+    def save_script_as(self):
+        start_dir = os.path.dirname(self.current_file_path) if self.current_file_path and self.current_file_path.startswith(FRIDA_SCRIPTS_DIR) else FRIDA_SCRIPTS_DIR
+        path, _ = QFileDialog.getSaveFileName(self, "Save Frida Script As", start_dir, "Frida JavaScript (*.js);;All Files (*)")
+        if not path:
+            return
+        if not os.path.splitext(path)[1]:
+            path += ".js"
+        self.current_file_path = path
+        self.save_script()
+        if hasattr(self, "f_tree"):
+            self.f_tree.setRootIndex(self.f_model.index(FRIDA_SCRIPTS_DIR))
+
+    def reload_current_script(self):
+        if not self.current_file_path or not os.path.exists(self.current_file_path):
+            self.route_frida_log("WARN", "No saved Frida script selected to reload.")
+            return
+        if self.editor.document().isModified():
+            answer = QMessageBox.question(self, "Reload Script", "Discard unsaved editor changes and reload from disk?")
+            if answer != QMessageBox.Yes:
+                return
+        try:
+            with open(self.current_file_path, "r", encoding="utf-8", errors="replace") as f:
+                self.editor.setPlainText(f.read())
+            self.editor.document().setModified(False)
+            self.refresh_editor_search_highlights(reset=True)
+            self.update_editor_status("Reloaded")
+            self.route_frida_log("SYSTEM", f"Reloaded script: {self.current_file_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Reload Error", f"Could not reload script: {str(e)}")
 
     def setup_frida_logs_tab(self):
         tab = QWidget();
@@ -981,8 +2927,28 @@ class Forensics(QMainWindow):
         btn_c = QPushButton("🧹 Clear");
         btn_c.clicked.connect(self.clear_frida_logs)
 
+        self.frida_log_font_spin = QSpinBox()
+        self.frida_log_font_spin.setRange(8, 40)
+        self.frida_log_font_spin.setValue(10)
+        self.frida_log_font_spin.setSuffix(" pt")
+        self.frida_log_font_spin.setToolTip("Frida Logs font size. You can also use Cmd/Ctrl + mouse wheel or trackpad pinch.")
+        btn_frida_font_down = QPushButton("A−")
+        btn_frida_font_down.setToolTip("Decrease Frida Logs font size")
+        btn_frida_font_down.clicked.connect(lambda: self.frida_display.zoom_out_font())
+        btn_frida_font_up = QPushButton("A+")
+        btn_frida_font_up.setToolTip("Increase Frida Logs font size")
+        btn_frida_font_up.clicked.connect(lambda: self.frida_display.zoom_in_font())
+        btn_frida_font_reset = QPushButton("A0")
+        btn_frida_font_reset.setToolTip("Reset Frida Logs font size")
+        btn_frida_font_reset.clicked.connect(lambda: self.frida_display.reset_font_zoom())
+
         controls.addWidget(QLabel("Search:"));
         controls.addWidget(self.frida_filter, 1);
+        controls.addWidget(QLabel("Font:"));
+        controls.addWidget(btn_frida_font_down);
+        controls.addWidget(self.frida_log_font_spin);
+        controls.addWidget(btn_frida_font_up);
+        controls.addWidget(btn_frida_font_reset);
         controls.addWidget(self.btn_frida_pause);
         controls.addWidget(btn_c);
         layout.addLayout(controls)
@@ -1009,39 +2975,155 @@ class Forensics(QMainWindow):
         filter_row.addStretch()
         layout.addLayout(filter_row)
 
-        self.frida_display = QTextEdit();
+        self.frida_display = FridaLogDisplay();
         self.frida_display.setReadOnly(True);
-        self.frida_display.setFont(QFont("Monospace", 10))
+        self.frida_display.set_log_font_size(self.frida_log_font_spin.value(), emit_signal=False)
+        self.frida_display.fontSizeChanged.connect(self.on_frida_log_font_size_changed)
+        self.frida_log_font_spin.valueChanged.connect(lambda size: self.set_log_view_font_size("frida", size))
         self.frida_display.setStyleSheet("background: #010409; color: #d1d5da;");
+        self.frida_display.lineDoubleClicked.connect(self.handle_frida_log_double_click)
         layout.addWidget(self.frida_display)
         self.tabs.addTab(tab, "💉 Frida Logs")
 
     def setup_logcat_tab(self):
-        tab = QWidget();
-        layout = QVBoxLayout(tab);
-        h = QHBoxLayout()
-        self.log_filter = QLineEdit();
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Buffered LogCat model: never discard lines because a level/search filter is active.
+        # The UI filters only control what is visible from this buffer.
+        self.logcat_entries = []
+        self.logcat_order = ["V", "D", "I", "W", "E", "F"]
+        self.logcat_level_names = {
+            "V": "Verbose", "D": "Debug", "I": "Info", "W": "Warning", "E": "Error", "F": "Fatal"
+        }
+        self.logcat_colors = {
+            "V": "#8b949e", "D": "#79c0ff", "I": "#aff5b4",
+            "W": "#ffa657", "E": "#ff7b72", "F": "#f85149"
+        }
+        self.logcat_max_entries = 20000
+
+        # Performance state: LogCat can emit thousands of rows quickly.
+        # Never recompute all visible rows for every incoming line; keep a rolling visible count
+        # and flush UI appends in batches on a short timer.
+        self.logcat_last_visible_count = 0
+        self.logcat_pending_html = []
+        self.logcat_flush_timer = QTimer(self)
+        self.logcat_flush_timer.setSingleShot(True)
+        self.logcat_flush_timer.timeout.connect(self.flush_logcat_pending_display)
+        self.logcat_status_timer = QTimer(self)
+        self.logcat_status_timer.setSingleShot(True)
+        self.logcat_status_timer.timeout.connect(self.update_logcat_status)
+
+        top_row = QHBoxLayout()
+        self.log_filter = QLineEdit()
+        self.log_filter.setPlaceholderText("Search LogCat buffer... filters visible rows only, does not discard lines")
+        self.log_filter.textChanged.connect(lambda _=None: self.refresh_logcat_display())
+
         self.log_level_box = QComboBox()
         self.log_levels = {"Verbose": "V", "Debug": "D", "Info": "I", "Warning": "W", "Error": "E", "Fatal": "F"}
-        self.log_level_box.addItems(list(self.log_levels.keys()));
+        self.log_level_box.addItems(list(self.log_levels.keys()))
+        self.log_level_box.setToolTip("Minimum visible level. Buffered rows are preserved when you change this.")
+        self.log_level_box.currentIndexChanged.connect(lambda _=None: self.refresh_logcat_display())
+
         self.log_hard_filter = QCheckBox("Hide Non-Matching")
-        self.log_hard_filter.setChecked(True);
+        self.log_hard_filter.setChecked(True)
+        self.log_hard_filter.setToolTip("When off, search text is highlighted but non-matching rows remain visible.")
         self.log_hard_filter.setStyleSheet("color: white;")
-        self.btn_log_pause = QPushButton("⏸ Pause");
+        self.log_hard_filter.toggled.connect(lambda _=None: self.refresh_logcat_display())
+
+        self.log_auto_scroll = QCheckBox("Auto-scroll")
+        self.log_auto_scroll.setChecked(True)
+        self.log_auto_scroll.setStyleSheet("color: white;")
+
+        self.btn_log_pause = QPushButton("⏸ Pause Display")
+        self.btn_log_pause.setToolTip("Pause live drawing only. Incoming LogCat lines still stay in the buffer.")
         self.btn_log_pause.clicked.connect(self.toggle_log_pause)
-        btn_clear = QPushButton("🧹 Clear");
-        btn_clear.clicked.connect(lambda: self.log_display.clear())
-        h.addWidget(QLabel("Level:"));
-        h.addWidget(self.log_level_box);
-        h.addWidget(self.log_filter, 1)
-        h.addWidget(self.log_hard_filter);
-        h.addWidget(self.btn_log_pause);
-        h.addWidget(btn_clear);
-        layout.addLayout(h)
-        self.log_display = QTextEdit();
-        self.log_display.setReadOnly(True);
-        self.log_display.setFont(QFont("Monospace", 10))
-        self.log_display.setStyleSheet("background: #010409; color: #d1d5da;");
+
+        btn_clear = QPushButton("🧹 Clear Buffer")
+        btn_clear.setToolTip("Clear the stored LogCat buffer and visible output.")
+        btn_clear.clicked.connect(self.clear_logcat_buffer)
+
+        btn_export = QPushButton("💾 Export Visible")
+        btn_export.setToolTip("Export currently visible/filtered LogCat rows to a .txt file.")
+        btn_export.clicked.connect(self.export_visible_logcat)
+
+        self.logcat_font_spin = QSpinBox()
+        self.logcat_font_spin.setRange(8, 40)
+        self.logcat_font_spin.setValue(10)
+        self.logcat_font_spin.setSuffix(" pt")
+        self.logcat_font_spin.setToolTip("LogCat font size. You can also use Cmd/Ctrl + mouse wheel or trackpad pinch.")
+        btn_logcat_font_down = QPushButton("A−")
+        btn_logcat_font_down.setToolTip("Decrease LogCat font size")
+        btn_logcat_font_down.clicked.connect(lambda: self.log_display.zoom_out_font())
+        btn_logcat_font_up = QPushButton("A+")
+        btn_logcat_font_up.setToolTip("Increase LogCat font size")
+        btn_logcat_font_up.clicked.connect(lambda: self.log_display.zoom_in_font())
+        btn_logcat_font_reset = QPushButton("A0")
+        btn_logcat_font_reset.setToolTip("Reset LogCat font size")
+        btn_logcat_font_reset.clicked.connect(lambda: self.log_display.reset_font_zoom())
+
+        top_row.addWidget(QLabel("Min Level:"))
+        top_row.addWidget(self.log_level_box)
+        top_row.addWidget(self.log_filter, 1)
+        top_row.addWidget(self.log_hard_filter)
+        top_row.addWidget(self.log_auto_scroll)
+        top_row.addWidget(QLabel("Font:"))
+        top_row.addWidget(btn_logcat_font_down)
+        top_row.addWidget(self.logcat_font_spin)
+        top_row.addWidget(btn_logcat_font_up)
+        top_row.addWidget(btn_logcat_font_reset)
+        top_row.addWidget(self.btn_log_pause)
+        top_row.addWidget(btn_clear)
+        top_row.addWidget(btn_export)
+        layout.addLayout(top_row)
+
+        level_row = QHBoxLayout()
+        level_row.addWidget(QLabel("Show Levels:"))
+        self.logcat_level_checks = {}
+        for code in self.logcat_order:
+            chk = QCheckBox(code)
+            chk.setChecked(True)
+            chk.setToolTip(self.logcat_level_names.get(code, code))
+            chk.setStyleSheet(f"color: {self.logcat_colors.get(code, '#c9d1d9')}; font-weight: bold;")
+            chk.toggled.connect(lambda _=None: self.refresh_logcat_display())
+            self.logcat_level_checks[code] = chk
+            level_row.addWidget(chk)
+
+        btn_levels_all = QPushButton("All")
+        btn_levels_all.clicked.connect(lambda: self.set_logcat_level_checks(self.logcat_order))
+        btn_levels_none = QPushButton("None")
+        btn_levels_none.clicked.connect(lambda: self.set_logcat_level_checks([]))
+        btn_levels_errors = QPushButton("Errors+")
+        btn_levels_errors.setToolTip("Show Error and Fatal only")
+        btn_levels_errors.clicked.connect(lambda: self.set_logcat_level_checks(["E", "F"]))
+
+        self.logcat_buffer_spin = QSpinBox()
+        self.logcat_buffer_spin.setRange(1000, 200000)
+        self.logcat_buffer_spin.setSingleStep(1000)
+        self.logcat_buffer_spin.setValue(self.logcat_max_entries)
+        self.logcat_buffer_spin.setSuffix(" rows")
+        self.logcat_buffer_spin.setToolTip("Maximum stored LogCat rows kept in memory.")
+        self.logcat_buffer_spin.valueChanged.connect(self.set_logcat_max_entries)
+
+        self.logcat_count_label = QLabel("Buffered: 0 | Visible: 0")
+        self.logcat_count_label.setStyleSheet("color: #8b949e;")
+
+        level_row.addWidget(btn_levels_all)
+        level_row.addWidget(btn_levels_none)
+        level_row.addWidget(btn_levels_errors)
+        level_row.addSpacing(20)
+        level_row.addWidget(QLabel("Buffer:"))
+        level_row.addWidget(self.logcat_buffer_spin)
+        level_row.addWidget(self.logcat_count_label)
+        level_row.addStretch()
+        layout.addLayout(level_row)
+
+        self.log_display = ZoomableLogTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_display.set_log_font_size(self.logcat_font_spin.value(), emit_signal=False)
+        self.log_display.fontSizeChanged.connect(self.on_logcat_font_size_changed)
+        self.logcat_font_spin.valueChanged.connect(lambda size: self.set_log_view_font_size("logcat", size))
+        self.log_display.setStyleSheet("background: #010409; color: #d1d5da;")
         layout.addWidget(self.log_display)
         self.tabs.addTab(tab, "🕵️ LogCat")
 
@@ -1075,6 +3157,12 @@ class Forensics(QMainWindow):
         self.remote_table = QTableWidget(0, 4)
         self.remote_table.setHorizontalHeaderLabels(["Name", "Size", "Date/Time", "Perms"]);
         self.remote_table.setSortingEnabled(True)
+        self.remote_table.horizontalHeader().setStretchLastSection(False)
+        self.remote_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.remote_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.remote_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.remote_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.remote_table.verticalHeader().setVisible(False)
         self.remote_table.setContextMenuPolicy(Qt.CustomContextMenu);
         self.remote_table.customContextMenuRequested.connect(self.show_remote_context_menu)
         self.remote_table.itemSelectionChanged.connect(self.preview_remote_file);
@@ -1090,6 +3178,7 @@ class Forensics(QMainWindow):
         layout.addWidget(self.fs_splitter)
         self.tabs.addTab(tab, "📁 File Explorer");
         self.refresh_remote_fs()
+        QTimer.singleShot(0, self.auto_size_remote_columns)
 
     def setup_gallery_tab(self):
         tab = QWidget();
@@ -1125,7 +3214,7 @@ class Forensics(QMainWindow):
         layout.addWidget(self.viewer, 2)
         self.tabs.addTab(tab, "📸 Gallery")
 
-    def setup_adb_tab(self):
+    def setup_proxy_tab(self):
         tab = QWidget();
         layout = QVBoxLayout(tab)
         p_box = QGroupBox("Burp Proxy");
@@ -1144,11 +3233,11 @@ class Forensics(QMainWindow):
         px_layout.addWidget(btn_cl);
         layout.addWidget(p_box)
 
-        global_px_box = QGroupBox("Global Proxy Rotator (Frida Engine Proxy)");
+        global_px_box = QGroupBox("Proxy Router / Validator");
         global_px_layout = QVBoxLayout(global_px_box)
 
-        control_row = QHBoxLayout()
         self.country_selector = QComboBox()
+        self.country_selector.setMinimumWidth(280)
 
         priority_countries = {
             "Brazil (BR)": "BR", "India (IN)": "IN", "Philippines (PH)": "PH",
@@ -1175,17 +3264,56 @@ class Forensics(QMainWindow):
             "United Kingdom (GB)": "GB", "United States (US)": "US"
         }
 
-        self.country_selector.addItem("--- ⭐ Priority Targets ---", None)
-        for name, code in priority_countries.items(): self.country_selector.addItem(name, code)
-        self.country_selector.addItem("--- 🌐 Global Regions ---", None)
-        for name, code in sorted(standard_countries.items()): self.country_selector.addItem(name, code)
-
-        self.country_selector.setCurrentIndex(2)  # Default points to India
+        self.proxy_priority_countries = priority_countries
+        self.proxy_standard_countries = standard_countries
+        self.populate_proxy_country_selector(default_code="IN")
         self.country_selector.currentIndexChanged.connect(self.load_manual_proxies_to_ui)
 
         self.chk_auto_fallback = QCheckBox("Auto-Fallback On Noise/Fail");
         self.chk_auto_fallback.setChecked(True);
         self.chk_auto_fallback.setStyleSheet("color: white;")
+
+        self.chk_include_socks_proxy = QCheckBox("Include SOCKS proxies")
+        self.chk_include_socks_proxy.setChecked(False)
+        self.chk_include_socks_proxy.setStyleSheet("color: white;")
+        self.chk_include_socks_proxy.setToolTip(
+            "HTTP/HTTPS proxy records are always shown and tested. Enable this to also include socks/socks4/socks5 records. "
+            "SOCKS validation through Python requests requires PySocks: pip install PySocks"
+        )
+        self.chk_include_socks_proxy.toggled.connect(self.on_include_socks_proxy_toggled)
+
+        self.proxy_timeout_spin = QSpinBox()
+        self.proxy_timeout_spin.setRange(3, 60)
+        self.proxy_timeout_spin.setValue(10)
+        self.proxy_timeout_spin.setSuffix(" sec")
+        self.proxy_timeout_spin.setToolTip(
+            "Timeout for each proxy validation request. Use a higher value for slow country proxies."
+        )
+        self.proxy_timeout_spin.valueChanged.connect(self.save_settings)
+
+        self.chk_clear_device_proxy_before_route = QCheckBox("Clear Android global proxy before Frida route")
+        self.chk_clear_device_proxy_before_route.setChecked(True)
+        self.chk_clear_device_proxy_before_route.setStyleSheet("color: white;")
+        self.chk_clear_device_proxy_before_route.setToolTip(
+            "Prevents stale Android global http_proxy settings from interfering with the per-app Frida proxy hook. "
+            "This does not change your macOS network proxy settings."
+        )
+
+        self.chk_apply_android_global_proxy_after_validation = QCheckBox("Set Android global proxy after validation")
+        self.chk_apply_android_global_proxy_after_validation.setChecked(False)
+        self.chk_apply_android_global_proxy_after_validation.setStyleSheet("color: white;")
+        self.chk_apply_android_global_proxy_after_validation.setToolTip(
+            "After a proxy validates, set Android Settings.Global http_proxy to host:port for device-wide proxy testing. "
+            "Android global http_proxy supports HTTP-style proxies only, not SOCKS."
+        )
+
+        self.chk_android_global_proxy_only = QCheckBox("Android global only, no Frida inject")
+        self.chk_android_global_proxy_only.setChecked(False)
+        self.chk_android_global_proxy_only.setStyleSheet("color: white;")
+        self.chk_android_global_proxy_only.setToolTip(
+            "Use this when you want Android global proxy mode only. It validates the proxy, sets Android global http_proxy, "
+            "and skips the per-app Java System.getProperty Frida hook."
+        )
 
         btn_edit_frida_script = QPushButton("📜 Frida Proxy Script")
         btn_edit_frida_script.setObjectName("editFridaScriptBtn")
@@ -1195,7 +3323,14 @@ class Forensics(QMainWindow):
         btn_edit_list.setObjectName("editListBtn")
         btn_edit_list.clicked.connect(self.open_proxy_file_in_system_editor)
 
-        btn_route_proxy = QPushButton("🚀 Route Global Proxy");
+        btn_fetch_proxifly = QPushButton("⬇ Import Sources")
+        btn_fetch_proxifly.setToolTip(
+            "Download the checked proxy source selections, merge new records into manual_proxies.json, "
+            "create a backup first, and refresh country counts."
+        )
+        btn_fetch_proxifly.clicked.connect(lambda: self.start_proxy_source_import(replace_existing=False, all_sources=False))
+
+        btn_route_proxy = QPushButton("🚀 Validate / Route Proxy");
         btn_route_proxy.setObjectName("runBtn");
         btn_route_proxy.clicked.connect(self.start_global_proxy_routing)
 
@@ -1203,28 +3338,183 @@ class Forensics(QMainWindow):
         btn_remove_proxy.setObjectName("killBtn");
         btn_remove_proxy.clicked.connect(self.remove_global_proxy)
 
-        control_row.addWidget(QLabel("Target Country:"));
-        control_row.addWidget(self.country_selector);
-        control_row.addWidget(self.chk_auto_fallback)
-        control_row.addWidget(btn_edit_frida_script)
-        control_row.addWidget(btn_edit_list)
-        control_row.addWidget(btn_route_proxy)
-        control_row.addWidget(btn_remove_proxy)
-        global_px_layout.addLayout(control_row)
+        self.global_proxy_status = QLabel("Validated proxy: none")
+        self.global_proxy_status.setStyleSheet("color: #8b949e; padding-left: 8px;")
+
+        router_main_row = QHBoxLayout()
+        router_main_row.addWidget(QLabel("Target Country:"))
+        router_main_row.addWidget(self.country_selector, 1)
+        router_main_row.addWidget(QLabel("Timeout:"))
+        router_main_row.addWidget(self.proxy_timeout_spin)
+        router_main_row.addSpacing(12)
+        router_main_row.addWidget(btn_route_proxy)
+        router_main_row.addWidget(btn_remove_proxy)
+        global_px_layout.addLayout(router_main_row)
+
+        router_options_box = QGroupBox("Validation / Routing Options")
+        router_options_grid = QGridLayout(router_options_box)
+        router_options_grid.addWidget(self.chk_auto_fallback, 0, 0)
+        router_options_grid.addWidget(self.chk_include_socks_proxy, 0, 1)
+        router_options_grid.addWidget(self.chk_clear_device_proxy_before_route, 0, 2)
+        router_options_grid.addWidget(self.chk_apply_android_global_proxy_after_validation, 1, 0)
+        router_options_grid.addWidget(self.chk_android_global_proxy_only, 1, 1)
+        router_options_grid.setColumnStretch(2, 1)
+        global_px_layout.addWidget(router_options_box)
+
+        router_tools_row = QHBoxLayout()
+        router_tools_row.addWidget(btn_edit_frida_script)
+        router_tools_row.addWidget(btn_edit_list)
+        router_tools_row.addWidget(btn_fetch_proxifly)
+        router_tools_row.addStretch(1)
+        router_tools_row.addWidget(self.global_proxy_status, 2)
+        global_px_layout.addLayout(router_tools_row)
+
+        android_proxy_row = QHBoxLayout()
+        btn_apply_android_proxy = QPushButton("🌐 Apply Validated to Android")
+        btn_apply_android_proxy.setToolTip("Set Android global http_proxy using the last validated HTTP/HTTPS proxy.")
+        btn_apply_android_proxy.clicked.connect(self.apply_current_validated_proxy_to_android_global)
+
+        btn_check_android_proxy = QPushButton("🔎 Check Android Proxy")
+        btn_check_android_proxy.setToolTip("Run adb shell settings get global http_proxy.")
+        btn_check_android_proxy.clicked.connect(self.check_android_global_proxy)
+
+        btn_clear_android_proxy = QPushButton("🧹 Clear Android Proxy")
+        btn_clear_android_proxy.setObjectName("killBtn")
+        btn_clear_android_proxy.setToolTip("Clear Android global http_proxy. This does not change your Mac proxy settings.")
+        btn_clear_android_proxy.clicked.connect(self.clear_android_global_proxy)
+
+        self.android_global_proxy_status = QLabel("Android global proxy: unknown")
+        self.android_global_proxy_status.setStyleSheet("color: #8b949e; padding-left: 8px;")
+
+        android_proxy_row.addWidget(btn_apply_android_proxy)
+        android_proxy_row.addWidget(btn_check_android_proxy)
+        android_proxy_row.addWidget(btn_clear_android_proxy)
+        android_proxy_row.addWidget(self.android_global_proxy_status, 1)
+        global_px_layout.addLayout(android_proxy_row)
 
         manual_row = QHBoxLayout()
         self.manual_proxy_input = QLineEdit()
         self.manual_proxy_input.setPlaceholderText(
-            "Enter custom static targets here (e.g. 192.168.1.50:8080, 200.16.4.2:3128)")
-        btn_save_manual = QPushButton("💾 Commit Manual List")
+            "HTTP proxies always included, e.g. http://1.2.3.4:8080 or 1.2.3.4:8080. Enable SOCKS to use socks5://1.2.3.4:1080")
+        self.manual_proxy_input.setToolTip(
+            "This is the editable proxy candidate pool for the selected country. HTTP/HTTPS proxies are always included. "
+            "SOCKS/SOCKS4/SOCKS5 proxies are shown/tested only when Include SOCKS proxies is enabled. "
+            "Plain host:port entries save as http://host:port. It does not set macOS proxy settings. "
+            "Safety: empty saves are blocked so clearing this box cannot delete a country pool."
+        )
+        btn_save_manual = QPushButton("💾 Save Country Pool")
+        btn_save_manual.setToolTip("Save the visible proxy list for the selected country. Creates an automatic backup first. Empty saves are blocked.")
         btn_save_manual.clicked.connect(self.save_manual_proxies_from_ui)
-        manual_row.addWidget(QLabel("Manual Override Pool: "))
+        btn_reload_pool = QPushButton("↻ Reload Pool")
+        btn_reload_pool.setToolTip("Reload this country pool from manual_proxies.json, discarding unsaved edits in the text box.")
+        btn_reload_pool.clicked.connect(self.load_manual_proxies_to_ui)
+        btn_backup_proxy = QPushButton("🧷 Backup")
+        btn_backup_proxy.setToolTip("Create a timestamped backup of manual_proxies.json now.")
+        btn_backup_proxy.clicked.connect(lambda: self.backup_manual_proxy_file(user_visible=True))
+        btn_restore_proxy = QPushButton("↩ Restore Backup")
+        btn_restore_proxy.setToolTip("Restore manual_proxies.json from a timestamped backup file.")
+        btn_restore_proxy.clicked.connect(self.restore_manual_proxy_backup)
+        btn_recover_cache = QPushButton("🛟 Recover Cache")
+        btn_recover_cache.setToolTip("Best-effort recovery: rebuild selected country entries from proxy_cache.json if available.")
+        btn_recover_cache.clicked.connect(self.recover_selected_proxy_pool_from_cache)
+        btn_refresh_counts = QPushButton("🔄 Counts")
+        btn_refresh_counts.clicked.connect(lambda: self.refresh_proxy_country_counts())
+
+        manual_row.addWidget(QLabel("Proxy Pool for Selected Country: "))
         manual_row.addWidget(self.manual_proxy_input, 1)
-        manual_row.addWidget(btn_save_manual)
         global_px_layout.addLayout(manual_row)
+
+        manual_actions_row = QHBoxLayout()
+        manual_actions_row.addWidget(btn_save_manual)
+        manual_actions_row.addWidget(btn_reload_pool)
+        manual_actions_row.addWidget(btn_backup_proxy)
+        manual_actions_row.addWidget(btn_restore_proxy)
+        manual_actions_row.addWidget(btn_recover_cache)
+        manual_actions_row.addWidget(btn_refresh_counts)
+        manual_actions_row.addStretch(1)
+        global_px_layout.addLayout(manual_actions_row)
 
         layout.addWidget(global_px_box)
 
+        import_box = QGroupBox("Proxy Source Import")
+        import_layout = QHBoxLayout(import_box)
+
+        source_left = QVBoxLayout()
+        source_left.addWidget(QLabel("Select one or more sources:"))
+        self.proxy_source_list = QListWidget()
+        self.proxy_source_list.setMinimumHeight(190)
+        self.populate_proxy_source_list()
+        source_left.addWidget(self.proxy_source_list)
+
+        source_buttons = QHBoxLayout()
+        btn_sources_all = QPushButton("All")
+        btn_sources_all.clicked.connect(lambda: self.set_proxy_source_checks(True))
+        btn_sources_none = QPushButton("None")
+        btn_sources_none.clicked.connect(lambda: self.set_proxy_source_checks(False))
+        btn_sources_http = QPushButton("HTTP Only")
+        btn_sources_http.clicked.connect(lambda: self.select_proxy_sources_by_family("http"))
+        btn_sources_socks = QPushButton("SOCKS Only")
+        btn_sources_socks.clicked.connect(lambda: self.select_proxy_sources_by_family("socks"))
+        source_buttons.addWidget(btn_sources_all)
+        source_buttons.addWidget(btn_sources_none)
+        source_buttons.addWidget(btn_sources_http)
+        source_buttons.addWidget(btn_sources_socks)
+        source_left.addLayout(source_buttons)
+
+        import_actions = QVBoxLayout()
+        btn_import_selected = QPushButton("⬇ Import Selected / Merge")
+        btn_import_selected.setObjectName("runBtn")
+        btn_import_selected.setToolTip("Download selected proxy sources, normalize to manual_proxies.json format, and merge only new protocol/ip/port records.")
+        btn_import_selected.clicked.connect(lambda: self.start_proxy_source_import(replace_existing=False, all_sources=False))
+
+        btn_import_all = QPushButton("⬇ Import All / Merge")
+        btn_import_all.setToolTip("Download all configured proxy sources and merge new records into manual_proxies.json.")
+        btn_import_all.clicked.connect(lambda: self.start_proxy_source_import(replace_existing=False, all_sources=True))
+
+        btn_clear_import_all = QPushButton("🧨 Clear List + Import All")
+        btn_clear_import_all.setObjectName("killBtn")
+        btn_clear_import_all.setToolTip("Back up current manual_proxies.json, clear it, then rebuild it from all configured sources.")
+        btn_clear_import_all.clicked.connect(lambda: self.start_proxy_source_import(replace_existing=True, all_sources=True))
+
+        btn_open_proxy_file = QPushButton("📝 Open Proxy JSON")
+        btn_open_proxy_file.clicked.connect(self.open_proxy_file_in_system_editor)
+
+        import_actions.addWidget(btn_import_selected)
+        import_actions.addWidget(btn_import_all)
+        import_actions.addWidget(btn_clear_import_all)
+        import_actions.addWidget(btn_open_proxy_file)
+        import_actions.addStretch()
+
+        source_right = QVBoxLayout()
+        source_right.addWidget(QLabel("Import status:"))
+        self.proxy_import_table = QTableWidget(0, 6)
+        self.proxy_import_table.setHorizontalHeaderLabels(["Source", "Status", "Raw", "Normalized", "Unique", "Skipped/Error"])
+        self.proxy_import_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for col in range(1, 6):
+            self.proxy_import_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        self.proxy_import_table.setMinimumHeight(160)
+        source_right.addWidget(self.proxy_import_table)
+
+        import_layout.addLayout(source_left, 2)
+        import_layout.addLayout(import_actions, 1)
+        import_layout.addLayout(source_right, 3)
+        layout.addWidget(import_box)
+
+        log_box = QGroupBox("Proxy Status Log")
+        log_layout = QVBoxLayout(log_box)
+        self.proxy_log = QTextEdit()
+        self.proxy_log.setReadOnly(True)
+        self.proxy_log.setFont(QFont("Monospace", 10))
+        self.proxy_log.setStyleSheet("background: #010409; color: #d1d5da;")
+        self.proxy_log.setMinimumHeight(160)
+        log_layout.addWidget(self.proxy_log)
+        layout.addWidget(log_box)
+
+        self.tabs.addTab(tab, "🌐 Proxy")
+
+    def setup_adb_tab(self):
+        tab = QWidget();
+        layout = QVBoxLayout(tab)
         apk_box = QGroupBox("Deployment");
         apk_layout = QHBoxLayout(apk_box);
         self.apk_path_display = QLineEdit()
@@ -1328,13 +3618,37 @@ class Forensics(QMainWindow):
         self.cmd_input.lineEdit().returnPressed.connect(self.execute_console_command);
         btn_send = QPushButton("SEND");
         btn_send.clicked.connect(self.execute_console_command)
+
+        self.adb_console_font_spin = QSpinBox()
+        self.adb_console_font_spin.setRange(8, 40)
+        self.adb_console_font_spin.setValue(10)
+        self.adb_console_font_spin.setSuffix(" pt")
+        self.adb_console_font_spin.setToolTip("ADB Console font size. You can also use Cmd/Ctrl + mouse wheel or trackpad pinch.")
+        btn_adb_font_down = QPushButton("A−")
+        btn_adb_font_down.setToolTip("Decrease ADB Console font size")
+        btn_adb_font_down.clicked.connect(lambda: self.console.zoom_out_font())
+        btn_adb_font_up = QPushButton("A+")
+        btn_adb_font_up.setToolTip("Increase ADB Console font size")
+        btn_adb_font_up.clicked.connect(lambda: self.console.zoom_in_font())
+        btn_adb_font_reset = QPushButton("A0")
+        btn_adb_font_reset.setToolTip("Reset ADB Console font size")
+        btn_adb_font_reset.clicked.connect(lambda: self.console.reset_font_zoom())
+
         h_layout.addWidget(QLabel("ADB:"), 0);
         h_layout.addWidget(self.cmd_input, 1);
         h_layout.addWidget(btn_send, 0);
+        h_layout.addWidget(QLabel("Font:"), 0);
+        h_layout.addWidget(btn_adb_font_down, 0);
+        h_layout.addWidget(self.adb_console_font_spin, 0);
+        h_layout.addWidget(btn_adb_font_up, 0);
+        h_layout.addWidget(btn_adb_font_reset, 0);
         layout.addLayout(h_layout)
-        self.console = QTextEdit();
+        self.console = ZoomableLogTextEdit();
         self.console.setReadOnly(True);
-        self.console.setStyleSheet("background: #010409; color: #d1d5da; font-family: 'Monospace';");
+        self.console.set_log_font_size(self.adb_console_font_spin.value(), emit_signal=False)
+        self.console.fontSizeChanged.connect(self.on_adb_console_font_size_changed)
+        self.adb_console_font_spin.valueChanged.connect(lambda size: self.set_log_view_font_size("adb_console", size))
+        self.console.setStyleSheet("background: #010409; color: #d1d5da;");
         layout.addWidget(self.console);
         self.tabs.addTab(tab, "📟 ADB Console")
 
@@ -1475,9 +3789,338 @@ class Forensics(QMainWindow):
             else:
                 subprocess.Popen(["xdg-open", MANUAL_PROXY_FILE])
 
-            QTimer.singleShot(1500, self.load_manual_proxies_to_ui)
+            QTimer.singleShot(1500, self.refresh_proxy_country_counts)
         except Exception as e:
             QMessageBox.warning(self, "Editor Error", f"Could not launch system editor: {str(e)}")
+
+    def load_proxy_file_records(self):
+        if not os.path.exists(MANUAL_PROXY_FILE):
+            return []
+        try:
+            with open(MANUAL_PROXY_FILE, "r", encoding="utf-8", errors="replace") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            if hasattr(self, "adb_out"):
+                self.adb_out.append(
+                    f"<font color='#ff7b72'>[PROXY EDITOR] Failed to read proxy file for counts: {str(e)}</font>")
+            return []
+
+    def proxy_record_country_value(self, record):
+        if not isinstance(record, dict):
+            return ""
+        geo = record.get("geolocation", {})
+        country = geo.get("country", "") if isinstance(geo, dict) else ""
+        if not country:
+            country = record.get("country", "")
+        return str(country).upper().strip()
+
+    def proxy_record_matches_country(self, record, country_code):
+        country_code = str(country_code).upper().strip()
+        country_value = self.proxy_record_country_value(record)
+        target_full_name = GLOBAL_COUNTRY_MAP.get(country_code, "").upper().strip()
+        return country_value == country_code or bool(target_full_name and target_full_name in country_value)
+
+    def normalize_proxy_protocol_value(self, proto):
+        proto = str(proto or "http").lower().strip()
+        if proto in ("socks", "socks4", "socks5"):
+            return proto
+        if proto in ("http", "https"):
+            return proto
+        return "http"
+
+    def proxy_protocol_from_record(self, record):
+        if not isinstance(record, dict):
+            return "http"
+        proto = str(record.get("protocol", "") or "").lower().strip()
+        if not proto:
+            proxy_url = str(record.get("proxy", "") or "").lower().strip()
+            m = re.match(r'^([a-zA-Z0-9+.-]+)://', proxy_url)
+            proto = m.group(1).lower() if m else "http"
+        return self.normalize_proxy_protocol_value(proto)
+
+    def proxy_protocol_family(self, proto):
+        proto = self.normalize_proxy_protocol_value(proto)
+        return "socks" if proto.startswith("socks") else "http"
+
+    def include_socks_proxies(self):
+        return bool(hasattr(self, "chk_include_socks_proxy") and self.chk_include_socks_proxy.isChecked())
+
+    def proxy_protocol_allowed(self, proto, include_socks=None):
+        if include_socks is None:
+            include_socks = self.include_socks_proxies()
+        family = self.proxy_protocol_family(proto)
+        return family == "http" or bool(include_socks)
+
+    def proxy_record_allowed_by_protocol(self, record, include_socks=None):
+        return self.proxy_protocol_allowed(self.proxy_protocol_from_record(record), include_socks=include_socks)
+
+    def proxy_country_protocol_counts(self, data=None):
+        data = self.load_proxy_file_records() if data is None else data
+        counts = {}
+        known_codes = set()
+        if hasattr(self, "proxy_priority_countries"):
+            known_codes.update(self.proxy_priority_countries.values())
+        if hasattr(self, "proxy_standard_countries"):
+            known_codes.update(self.proxy_standard_countries.values())
+        known_codes.update(GLOBAL_COUNTRY_MAP.keys())
+
+        for code in known_codes:
+            counts[code] = {"http": 0, "socks": 0}
+
+        for record in data:
+            if not isinstance(record, dict) or not record.get("ip") or not record.get("port"):
+                continue
+            proto = self.proxy_protocol_from_record(record)
+            family = self.proxy_protocol_family(proto)
+            matched = False
+            for code in known_codes:
+                if self.proxy_record_matches_country(record, code):
+                    counts.setdefault(code, {"http": 0, "socks": 0})
+                    counts[code][family] = counts[code].get(family, 0) + 1
+                    matched = True
+            if not matched:
+                country_value = self.proxy_record_country_value(record)
+                if country_value:
+                    counts.setdefault(country_value, {"http": 0, "socks": 0})
+                    counts[country_value][family] = counts[country_value].get(family, 0) + 1
+        return counts
+
+    def append_proxy_status(self, category, message, color=None):
+        colors = {"INFO": "#58a6ff", "TESTING": "#8b949e", "WARN": "#ffa657", "SUCCESS": "#7ee787", "ERROR": "#ff7b72", "CRITICAL": "#f85149"}
+        use_color = color or colors.get(str(category).upper(), "#c9d1d9")
+        safe_msg = html.escape(str(message))
+        line = f"<font color='{use_color}'>[PROXY] {safe_msg}</font>"
+        if hasattr(self, "proxy_log"):
+            self.proxy_log.append(line)
+            self.proxy_log.moveCursor(QTextCursor.End)
+        if hasattr(self, "adb_out"):
+            self.adb_out.append(line.replace("[PROXY]", "[PROXY ROTATOR]"))
+
+    def get_proxy_import_sources(self):
+        return list(PROXY_IMPORT_SOURCES)
+
+    def populate_proxy_source_list(self):
+        if not hasattr(self, "proxy_source_list"):
+            return
+        self.proxy_source_list.clear()
+        for src in self.get_proxy_import_sources():
+            item = QListWidgetItem(src.get("name", src.get("id", "proxy-source")))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            # Default to Proxifly + HTTP text lists, leave SOCKS opt-in so imports stay manageable.
+            proto = str(src.get("protocol", "auto")).lower()
+            checked = src.get("id") in ("proxifly_all_json", "thespeedx_http", "monosans_http", "jetkai_http")
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            item.setData(Qt.UserRole, src)
+            item.setToolTip(src.get("url", ""))
+            self.proxy_source_list.addItem(item)
+
+    def set_proxy_source_checks(self, checked):
+        if not hasattr(self, "proxy_source_list"):
+            return
+        for i in range(self.proxy_source_list.count()):
+            self.proxy_source_list.item(i).setCheckState(Qt.Checked if checked else Qt.Unchecked)
+
+    def select_proxy_sources_by_family(self, family):
+        if not hasattr(self, "proxy_source_list"):
+            return
+        family = str(family or "").lower()
+        for i in range(self.proxy_source_list.count()):
+            item = self.proxy_source_list.item(i)
+            src = item.data(Qt.UserRole) or {}
+            proto = str(src.get("protocol", "auto")).lower()
+            if family == "http":
+                checked = proto in ("auto", "http", "https")
+            elif family == "socks":
+                checked = proto in ("socks", "socks4", "socks5")
+            else:
+                checked = False
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+
+    def selected_proxy_import_sources(self, all_sources=False):
+        sources = []
+        if all_sources or not hasattr(self, "proxy_source_list"):
+            return self.get_proxy_import_sources()
+        for i in range(self.proxy_source_list.count()):
+            item = self.proxy_source_list.item(i)
+            if item.checkState() == Qt.Checked:
+                src = item.data(Qt.UserRole)
+                if isinstance(src, dict):
+                    sources.append(src)
+        return sources
+
+    def start_proxy_source_import(self, replace_existing=False, all_sources=False):
+        if hasattr(self, "proxy_source_import_worker") and self.proxy_source_import_worker.isRunning():
+            QMessageBox.information(self, "Import Already Running", "A proxy source import is already running.")
+            return
+
+        sources = self.selected_proxy_import_sources(all_sources=all_sources)
+        if not sources:
+            QMessageBox.warning(self, "No Sources Selected", "Select at least one proxy source to import.")
+            return
+
+        if replace_existing:
+            if QMessageBox.question(
+                self,
+                "Clear List and Reimport",
+                f"This will back up manual_proxies.json, clear the current list, and rebuild it from all {len(sources)} configured source(s).\n\nContinue?",
+            ) != QMessageBox.Yes:
+                return
+        else:
+            if QMessageBox.question(
+                self,
+                "Import Proxy Sources",
+                f"Download and merge {len(sources)} selected proxy source(s) into manual_proxies.json?\n\nA backup is created before writing. Existing protocol/ip/port entries are skipped.",
+            ) != QMessageBox.Yes:
+                return
+
+        timeout = 30
+        if hasattr(self, "proxy_timeout_spin"):
+            timeout = max(30, int(self.proxy_timeout_spin.value()))
+        self.proxy_import_replace_existing = bool(replace_existing)
+        self.proxy_import_table.setRowCount(0) if hasattr(self, "proxy_import_table") else None
+        self.append_proxy_status("INFO", f"Starting proxy source import: sources={len(sources)}, replace_existing={replace_existing}, timeout={timeout}s")
+
+        self.proxy_source_import_worker = ProxySourceImportWorker(sources=sources, timeout_seconds=timeout)
+        self.proxy_source_import_worker.status_signal.connect(self.handle_proxy_worker_status)
+        self.proxy_source_import_worker.result_signal.connect(self.handle_proxy_source_import_result)
+        self.proxy_source_import_worker.start()
+
+    def update_proxy_import_table(self, stats):
+        if not hasattr(self, "proxy_import_table"):
+            return
+        rows = (stats or {}).get("sources", []) if isinstance(stats, dict) else []
+        self.proxy_import_table.setRowCount(0)
+        for row in rows:
+            r = self.proxy_import_table.rowCount()
+            self.proxy_import_table.insertRow(r)
+            vals = [
+                row.get("name", ""),
+                row.get("status", ""),
+                str(row.get("raw", 0)),
+                str(row.get("normalized", 0)),
+                str(row.get("deduped", 0)),
+                row.get("error") or str(row.get("skipped", 0)),
+            ]
+            for c, val in enumerate(vals):
+                item = QTableWidgetItem(str(val))
+                if c == 1:
+                    if str(val).upper() == "OK":
+                        item.setForeground(QColor("#7ee787"))
+                    else:
+                        item.setForeground(QColor("#ff7b72"))
+                self.proxy_import_table.setItem(r, c, item)
+        self.proxy_import_table.resizeColumnsToContents()
+        self.proxy_import_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+
+    def write_proxy_records_replacing_existing(self, imported_records):
+        clean = []
+        seen = set()
+        for rec in imported_records or []:
+            if not isinstance(rec, dict):
+                continue
+            ip = str(rec.get("ip", "")).strip()
+            port = str(rec.get("port", "")).strip()
+            proto = self.normalize_proxy_protocol_value(rec.get("protocol", "http"))
+            if not ip or not port:
+                continue
+            key = (proto, ip, port)
+            if key in seen:
+                continue
+            seen.add(key)
+            rec["protocol"] = proto
+            rec["proxy"] = f"{proto}://{ip}:{port}"
+            if "geolocation" not in rec or not isinstance(rec.get("geolocation"), dict):
+                rec["geolocation"] = {"country": str(rec.get("country", "UNKNOWN")).upper().strip() or "UNKNOWN", "city": "Unknown"}
+            clean.append(rec)
+        self.backup_manual_proxy_file(user_visible=True)
+        with open(MANUAL_PROXY_FILE, "w", encoding="utf-8") as f:
+            json.dump(clean, f, indent=4)
+        return len(clean)
+
+    def handle_proxy_source_import_result(self, imported_records, stats, error):
+        self.update_proxy_import_table(stats)
+        if error:
+            self.append_proxy_status("ERROR", f"Proxy source import failed: {error}")
+            QMessageBox.critical(self, "Proxy Import Failed", str(error))
+            return
+        try:
+            replace_existing = bool(getattr(self, "proxy_import_replace_existing", False))
+            if replace_existing:
+                written = self.write_proxy_records_replacing_existing(imported_records)
+                duplicates = 0
+                added = written
+            else:
+                added, duplicates = self.merge_imported_proxy_records(imported_records)
+            self.refresh_proxy_country_counts()
+            total_raw = stats.get("total_raw", 0) if isinstance(stats, dict) else 0
+            total_norm = stats.get("total_normalized", len(imported_records or [])) if isinstance(stats, dict) else len(imported_records or [])
+            total_skipped = stats.get("total_skipped", 0) if isinstance(stats, dict) else 0
+            mode = "cleared and rebuilt" if replace_existing else "merged"
+            self.append_proxy_status("SUCCESS", f"Proxy import complete: mode={mode}, raw={total_raw}, normalized={total_norm}, added/written={added}, duplicates skipped={duplicates}, invalid/source skipped={total_skipped}")
+            QMessageBox.information(
+                self,
+                "Proxy Import Complete",
+                f"Proxy import complete.\n\nMode: {mode}\nRaw records: {total_raw}\nNormalized unique batch: {total_norm}\nAdded/Written: {added}\nDuplicates skipped: {duplicates}\nInvalid/source skipped: {total_skipped}",
+            )
+        except Exception as e:
+            self.append_proxy_status("ERROR", f"Proxy import merge/write failed: {e}")
+            QMessageBox.critical(self, "Proxy Import Merge Failed", str(e))
+
+    def count_proxy_records_by_country(self, data=None):
+        # Backward-compatible helper: returns visible/eligible count based on Include SOCKS setting.
+        family_counts = self.proxy_country_protocol_counts(data=data)
+        include_socks = self.include_socks_proxies()
+        out = {}
+        for code, c in family_counts.items():
+            out[code] = int(c.get("http", 0)) + (int(c.get("socks", 0)) if include_socks else 0)
+        return out
+
+    def proxy_count_label_for_country(self, country_code, family_counts):
+        c = family_counts.get(country_code, {"http": 0, "socks": 0})
+        http_count = int(c.get("http", 0))
+        socks_count = int(c.get("socks", 0))
+        if self.include_socks_proxies():
+            total = http_count + socks_count
+            return f"H:{http_count} S:{socks_count} T:{total}"
+        return str(http_count)
+
+    def populate_proxy_country_selector(self, default_code=None):
+        if not hasattr(self, "country_selector"):
+            return
+        current_code = default_code or self.get_resolved_country_code()
+        counts = self.proxy_country_protocol_counts()
+
+        self.country_selector.blockSignals(True)
+        self.country_selector.clear()
+        self.country_selector.addItem("--- ⭐ Priority Targets ---", None)
+        for name, code in self.proxy_priority_countries.items():
+            self.country_selector.addItem(f"{name} [{self.proxy_count_label_for_country(code, counts)}]", code)
+        self.country_selector.addItem("--- 🌐 Global Regions ---", None)
+        for name, code in sorted(self.proxy_standard_countries.items()):
+            self.country_selector.addItem(f"{name} [{self.proxy_count_label_for_country(code, counts)}]", code)
+
+        if current_code:
+            for i in range(self.country_selector.count()):
+                if self.country_selector.itemData(i) == current_code:
+                    self.country_selector.setCurrentIndex(i)
+                    break
+        self.country_selector.blockSignals(False)
+
+    def on_include_socks_proxy_toggled(self, checked):
+        self.refresh_proxy_country_counts()
+        self.save_settings()
+        mode = "HTTP/HTTPS + SOCKS" if checked else "HTTP/HTTPS only"
+        if hasattr(self, "adb_out"):
+            self.adb_out.append(f"<font color='#8b949e'>[PROXY EDITOR] Proxy pool mode changed to: {mode}</font>")
+
+    def refresh_proxy_country_counts(self):
+        keep_code = self.get_resolved_country_code() if hasattr(self, "country_selector") else "IN"
+        self.populate_proxy_country_selector(default_code=keep_code)
+        self.load_manual_proxies_to_ui()
+        if hasattr(self, "adb_out"):
+            mode = "HTTP/HTTPS + SOCKS" if self.include_socks_proxies() else "HTTP/HTTPS only"
+            self.adb_out.append(f"<font color='#8b949e'>[PROXY EDITOR] Country proxy counts refreshed ({mode}).</font>")
 
     def get_resolved_country_code(self):
         idx = self.country_selector.currentIndex()
@@ -1494,29 +4137,304 @@ class Forensics(QMainWindow):
             self.manual_proxy_input.clear()
             return
 
-        target_full_name = GLOBAL_COUNTRY_MAP.get(country_code, "")
+        data = self.load_proxy_file_records()
+        matches = []
+        include_socks = self.include_socks_proxies()
+        for x in data:
+            if (self.proxy_record_matches_country(x, country_code) and x.get("ip") and x.get("port")
+                    and self.proxy_record_allowed_by_protocol(x, include_socks=include_socks)):
+                proto = self.proxy_protocol_from_record(x)
+                matches.append(f"{proto}://{x['ip']}:{x['port']}")
 
-        if os.path.exists(MANUAL_PROXY_FILE):
+        self.manual_proxy_input.setText(", ".join(matches))
+
+    def get_proxy_backup_dir(self):
+        backup_dir = os.path.join(BASE_DIR, "proxy_backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        return backup_dir
+
+    def backup_manual_proxy_file(self, user_visible=False):
+        if not os.path.exists(MANUAL_PROXY_FILE):
+            if user_visible and hasattr(self, "adb_out"):
+                self.adb_out.append("<font color='#ffa657'>[PROXY BACKUP] No manual_proxies.json exists yet; nothing to backup.</font>")
+            return None
+
+        try:
+            if os.path.getsize(MANUAL_PROXY_FILE) <= 0:
+                if user_visible and hasattr(self, "adb_out"):
+                    self.adb_out.append("<font color='#ffa657'>[PROXY BACKUP] manual_proxies.json is empty; backup skipped.</font>")
+                return None
+        except Exception:
+            pass
+
+        try:
+            backup_dir = self.get_proxy_backup_dir()
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(backup_dir, f"manual_proxies_backup_{stamp}.json")
+            shutil.copy2(MANUAL_PROXY_FILE, backup_path)
+
+            # Keep the newest 75 backups to avoid unbounded growth.
             try:
-                with open(MANUAL_PROXY_FILE, "r") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        matches = []
-                        for x in data:
-                            geo = x.get("geolocation", {})
-                            c_val = geo.get("country", "").upper().strip() if isinstance(geo, dict) else ""
-                            if not c_val:
-                                c_val = x.get("country", "").upper().strip()
-
-                            if (c_val == country_code or (target_full_name and target_full_name in c_val)) and x.get(
-                                    "ip") and x.get("port"):
-                                matches.append(f"{x['ip']}:{x['port']}")
-
-                        self.manual_proxy_input.setText(", ".join(matches))
-                        return
-            except:
+                backups = sorted(
+                    [os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("manual_proxies_backup_") and f.endswith(".json")],
+                    key=os.path.getmtime,
+                    reverse=True,
+                )
+                for old_backup in backups[75:]:
+                    try:
+                        os.remove(old_backup)
+                    except Exception:
+                        pass
+            except Exception:
                 pass
-        self.manual_proxy_input.clear()
+
+            if user_visible and hasattr(self, "adb_out"):
+                self.adb_out.append(
+                    f"<font color='#7ee787'>[PROXY BACKUP] Saved backup: {backup_path}</font>")
+            return backup_path
+        except Exception as e:
+            if hasattr(self, "adb_out"):
+                self.adb_out.append(
+                    f"<font color='#ff7b72'>[PROXY BACKUP] Backup failed: {str(e)}</font>")
+            return None
+
+    def merge_imported_proxy_records(self, imported_records):
+        if not imported_records:
+            return 0, 0
+
+        existing_data = self.load_proxy_file_records()
+        existing_keys = set()
+        for rec in existing_data:
+            if not isinstance(rec, dict):
+                continue
+            ip = str(rec.get("ip", "")).strip()
+            port = str(rec.get("port", "")).strip()
+            proto = self.normalize_proxy_protocol_value(self.proxy_protocol_from_record(rec))
+            if ip and port:
+                existing_keys.add((proto, ip, port))
+
+        added = 0
+        duplicates = 0
+        for rec in imported_records:
+            if not isinstance(rec, dict):
+                continue
+            ip = str(rec.get("ip", "")).strip()
+            port = str(rec.get("port", "")).strip()
+            proto = self.normalize_proxy_protocol_value(rec.get("protocol", "http"))
+            if not ip or not port:
+                continue
+            key = (proto, ip, port)
+            if key in existing_keys:
+                duplicates += 1
+                continue
+            rec["protocol"] = proto
+            rec["proxy"] = f"{proto}://{ip}:{port}"
+            if "geolocation" not in rec or not isinstance(rec.get("geolocation"), dict):
+                rec["geolocation"] = {"country": str(rec.get("country", "UNKNOWN")).upper().strip() or "UNKNOWN", "city": "Unknown"}
+            rec.setdefault("source", "proxifly/free-proxy-list")
+            rec.setdefault("anonymity", "proxifly-import")
+            rec.setdefault("score", 1)
+            existing_data.append(rec)
+            existing_keys.add(key)
+            added += 1
+
+        if added > 0:
+            self.backup_manual_proxy_file(user_visible=True)
+            with open(MANUAL_PROXY_FILE, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=4)
+
+        return added, duplicates
+
+    def fetch_free_proxy_list_from_proxifly(self):
+        if hasattr(self, "proxifly_import_worker") and self.proxifly_import_worker.isRunning():
+            QMessageBox.information(self, "Import Already Running", "A free proxy list import is already running.")
+            return
+
+        if QMessageBox.question(
+            self,
+            "Fetch Free Proxy List",
+            "Download and merge the Proxifly free proxy list into manual_proxies.json?\n\n"
+            "A backup is created before writing. Existing ip/port/protocol entries are skipped."
+        ) != QMessageBox.Yes:
+            return
+
+        timeout = 30
+        if hasattr(self, "proxy_timeout_spin"):
+            timeout = max(30, int(self.proxy_timeout_spin.value()))
+
+        self.proxifly_import_worker = ProxiflyImportWorker(timeout_seconds=timeout)
+        self.proxifly_import_worker.status_signal.connect(self.handle_proxy_worker_status)
+        self.proxifly_import_worker.result_signal.connect(self.handle_proxifly_import_result)
+        self.proxifly_import_worker.start()
+
+    def handle_proxifly_import_result(self, imported_records, total_items, skipped, normalized_count, error):
+        if error:
+            self.adb_out.append(
+                f"<font color='#ff7b72'>[PROXY IMPORT] Proxifly import failed: {html.escape(str(error))}</font>")
+            QMessageBox.critical(self, "Proxy Import Failed", f"Could not import Proxifly proxy list:\n{str(error)}")
+            return
+
+        try:
+            added, duplicates = self.merge_imported_proxy_records(imported_records)
+            self.refresh_proxy_country_counts()
+            self.adb_out.append(
+                f"<font color='#7ee787'>[PROXY IMPORT] Proxifly import complete. Raw: {total_items}, normalized: {normalized_count}, added: {added}, duplicates skipped: {duplicates}, invalid skipped: {skipped}.</font>")
+            QMessageBox.information(
+                self,
+                "Proxy Import Complete",
+                f"Proxifly import complete.\n\n"
+                f"Raw records: {total_items}\n"
+                f"Normalized: {normalized_count}\n"
+                f"Added: {added}\n"
+                f"Duplicates skipped: {duplicates}\n"
+                f"Invalid skipped: {skipped}"
+            )
+        except Exception as e:
+            self.adb_out.append(
+                f"<font color='#ff7b72'>[PROXY IMPORT] Failed to merge Proxifly proxies: {html.escape(str(e))}</font>")
+            QMessageBox.critical(self, "Proxy Import Merge Failed", str(e))
+
+    def restore_manual_proxy_backup(self):
+        backup_dir = self.get_proxy_backup_dir()
+        backup_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Restore manual_proxies.json Backup",
+            backup_dir,
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not backup_path:
+            return
+
+        if QMessageBox.question(
+            self,
+            "Restore Proxy Backup",
+            "Restore this backup over the current manual_proxies.json?\n\n"
+            "The current file will be backed up first.",
+        ) != QMessageBox.Yes:
+            return
+
+        try:
+            self.backup_manual_proxy_file(user_visible=True)
+            shutil.copy2(backup_path, MANUAL_PROXY_FILE)
+            self.refresh_proxy_country_counts()
+            self.adb_out.append(
+                f"<font color='#7ee787'>[PROXY BACKUP] Restored proxy file from: {backup_path}</font>")
+        except Exception as e:
+            QMessageBox.critical(self, "Restore Failed", f"Could not restore backup:\n{str(e)}")
+            if hasattr(self, "adb_out"):
+                self.adb_out.append(
+                    f"<font color='#ff7b72'>[PROXY BACKUP] Restore failed: {str(e)}</font>")
+
+    def parse_proxy_pool_tokens(self, raw_text):
+        tokens = [t.strip() for t in re.split(r'[,\s;]+', raw_text or "") if t.strip()]
+        parsed = []
+        seen = set()
+        for token in tokens:
+            # Accept protocol://host:port and plain host:port.
+            proto = "http"
+            proto_match = re.match(r'^([a-zA-Z0-9+.-]+)://(.+)$', token)
+            if proto_match:
+                proto = self.normalize_proxy_protocol_value(proto_match.group(1))
+                cleaned = proto_match.group(2)
+            else:
+                cleaned = token
+
+            if cleaned.count(":") < 1:
+                continue
+            ip, port = cleaned.rsplit(":", 1)
+            ip = ip.strip().strip("[]")
+            port = port.strip()
+            if not ip or not port:
+                continue
+            if not port.isdigit():
+                continue
+            port_int = int(port)
+            key = (self.normalize_proxy_protocol_value(proto), ip, str(port_int))
+            if key in seen:
+                continue
+            seen.add(key)
+            parsed.append({"ip": ip, "port": port_int, "protocol": self.normalize_proxy_protocol_value(proto)})
+        return parsed
+
+    def recover_selected_proxy_pool_from_cache(self):
+        country_code = self.get_resolved_country_code()
+        if not country_code:
+            QMessageBox.warning(self, "Selection Error", "Please select a valid target country.")
+            return
+
+        cache_file = os.path.join(BASE_DIR, "proxy_cache.json")
+        if not os.path.exists(cache_file):
+            QMessageBox.warning(self, "No Cache", f"No proxy cache file found:\n{cache_file}")
+            return
+
+        try:
+            with open(cache_file, "r", encoding="utf-8", errors="replace") as f:
+                cache = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Cache Read Error", f"Could not read proxy cache:\n{str(e)}")
+            return
+
+        cached_nodes = cache.get(country_code, [])
+        if not cached_nodes:
+            QMessageBox.warning(self, "No Cached Entries", f"No cached proxy entries found for [{country_code}].")
+            return
+
+        target_full_name = GLOBAL_COUNTRY_MAP.get(country_code, "")
+        existing_data = self.load_proxy_file_records()
+        existing_keys = set()
+        for rec in existing_data:
+            if isinstance(rec, dict) and rec.get("ip") and rec.get("port"):
+                existing_keys.add((str(rec.get("ip")), str(rec.get("port"))))
+
+        recovered = []
+        for node in cached_nodes:
+            ip = str(node.get("ip", "")).strip()
+            port = str(node.get("port", "")).strip()
+            if not ip or not port:
+                continue
+            key = (ip, port)
+            if key in existing_keys:
+                continue
+            recovered.append({
+                "proxy": f"{self.normalize_proxy_protocol_value(node.get('protocol', 'http'))}://{ip}:{port}",
+                "protocol": self.normalize_proxy_protocol_value(node.get("protocol", "http")),
+                "ip": ip,
+                "port": int(port) if port.isdigit() else port,
+                "https": False,
+                "anonymity": "recovered-from-cache",
+                "score": node.get("rank", 1),
+                "geolocation": {
+                    "country": target_full_name if target_full_name else country_code,
+                    "city": "Recovered from proxy_cache.json"
+                }
+            })
+            existing_keys.add(key)
+
+        if not recovered:
+            self.adb_out.append(
+                f"<font color='#ffa657'>[PROXY RECOVERY] Cache had entries for [{country_code}], but they already exist in manual_proxies.json.</font>")
+            return
+
+        if QMessageBox.question(
+            self,
+            "Recover Proxy Pool From Cache",
+            f"Recover {len(recovered)} cached proxy record(s) for [{country_code}] into manual_proxies.json?\n\n"
+            "A backup of the current file will be created first."
+        ) != QMessageBox.Yes:
+            return
+
+        try:
+            self.backup_manual_proxy_file(user_visible=True)
+            existing_data.extend(recovered)
+            with open(MANUAL_PROXY_FILE, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=4)
+            self.refresh_proxy_country_counts()
+            self.adb_out.append(
+                f"<font color='#7ee787'>[PROXY RECOVERY] Recovered {len(recovered)} cached proxy record(s) for [{country_code}].</font>")
+        except Exception as e:
+            self.adb_out.append(
+                f"<font color='#ff7b72'>[PROXY RECOVERY] Failed to recover from cache: {str(e)}</font>")
+            QMessageBox.critical(self, "Recovery Failed", str(e))
 
     def save_manual_proxies_from_ui(self):
         country_code = self.get_resolved_country_code()
@@ -1526,56 +4444,88 @@ class Forensics(QMainWindow):
 
         target_full_name = GLOBAL_COUNTRY_MAP.get(country_code, "")
         raw_text = self.manual_proxy_input.text().strip()
-        existing_data = []
-        if os.path.exists(MANUAL_PROXY_FILE):
-            try:
-                with open(MANUAL_PROXY_FILE, "r") as f:
-                    existing_data = json.load(f)
-                    if not isinstance(existing_data, list): existing_data = []
-            except:
-                pass
+        existing_data = self.load_proxy_file_records()
+        include_socks = self.include_socks_proxies()
+        mode_label = "HTTP/HTTPS + SOCKS" if include_socks else "HTTP/HTTPS only"
+
+        existing_count_for_country = sum(
+            1 for x in existing_data
+            if self.proxy_record_matches_country(x, country_code)
+            and self.proxy_record_allowed_by_protocol(x, include_socks=include_socks)
+        )
+
+        # Safety fix: never treat an empty text box as a destructive delete operation.
+        # Clearing this QLineEdit should only clear the visible editor field, not wipe JSON records.
+        if not raw_text:
+            QMessageBox.warning(
+                self,
+                "Empty Save Blocked",
+                f"The proxy pool field for [{country_code}] is empty.\n\n"
+                f"Saving this would remove {existing_count_for_country} visible {mode_label} record(s), so it was blocked.\n\n"
+                "Use ↻ Reload Pool to restore the visible list from manual_proxies.json, "
+                "or edit the JSON file directly if you intentionally need to delete records."
+            )
+            self.adb_out.append(
+                f"<font color='#ffa657'>[PROXY SAFETY] Empty save blocked for [{country_code}] to prevent deleting {existing_count_for_country} record(s).</font>")
+            return
+
+        parsed = self.parse_proxy_pool_tokens(raw_text)
+        if not parsed:
+            QMessageBox.warning(
+                self,
+                "No Valid Proxies",
+                "No valid proxy entries were found. Use host:port, http://host:port, https://host:port, or enable SOCKS for socks5://host:port."
+            )
+            self.adb_out.append(
+                f"<font color='#ffa657'>[PROXY SAFETY] Save blocked for [{country_code}] because no valid proxy entries were parsed.</font>")
+            return
+
+        socks_entries = [p for p in parsed if self.proxy_protocol_family(p.get("protocol")) == "socks"]
+        if socks_entries and not include_socks:
+            QMessageBox.warning(
+                self,
+                "SOCKS Not Enabled",
+                f"This list contains {len(socks_entries)} SOCKS proxy entr{'y' if len(socks_entries) == 1 else 'ies'}, "
+                "but Include SOCKS proxies is not checked.\n\n"
+                "Check Include SOCKS proxies before saving/testing SOCKS records."
+            )
+            self.adb_out.append(
+                f"<font color='#ffa657'>[PROXY SAFETY] Save blocked for [{country_code}] because SOCKS records were present while Include SOCKS proxies was off.</font>")
+            return
 
         purged_data = []
         for x in existing_data:
-            geo = x.get("geolocation", {})
-            c_val = geo.get("country", "").upper().strip() if isinstance(geo, dict) else ""
-            if not c_val:
-                c_val = x.get("country", "").upper().strip()
+            # Only replace the visible/eligible family. This prevents HTTP-only editing from deleting SOCKS records.
+            if self.proxy_record_matches_country(x, country_code) and self.proxy_record_allowed_by_protocol(x, include_socks=include_socks):
+                continue
+            purged_data.append(x)
 
-            if c_val != country_code and (not target_full_name or target_full_name not in c_val):
-                purged_data.append(x)
-
-        if raw_text:
-            tokens = [t.strip() for t in re.split(r'[,\s;]+', raw_text) if t.strip()]
-            for token in tokens:
-                if ":" in token:
-                    parts = token.split(":")
-                    if len(parts) == 2:
-                        ip = parts[0]
-                        port = int(parts[1]) if parts[1].isdigit() else parts[1]
-                        purged_data.append({
-                            "proxy": f"socks5://{ip}:{port}",
-                            "protocol": "socks5",
-                            "ip": ip,
-                            "port": port,
-                            "https": False,
-                            "anonymity": "transparent",
-                            "score": 1,
-                            "geolocation": {
-                                "country": target_full_name if target_full_name else country_code,
-                                "city": "Unknown"
-                            }
-                        })
+        for node in parsed:
+            proto = self.normalize_proxy_protocol_value(node.get("protocol", "http"))
+            purged_data.append({
+                "proxy": f"{proto}://{node['ip']}:{node['port']}",
+                "protocol": proto,
+                "ip": node["ip"],
+                "port": node["port"],
+                "https": proto in ("http", "https"),
+                "anonymity": "manual-ui",
+                "score": 1,
+                "geolocation": {
+                    "country": target_full_name if target_full_name else country_code,
+                    "city": "Unknown"
+                }
+            })
 
         try:
-            with open(MANUAL_PROXY_FILE, "w") as f:
+            backup_path = self.backup_manual_proxy_file(user_visible=True)
+            with open(MANUAL_PROXY_FILE, "w", encoding="utf-8") as f:
                 json.dump(purged_data, f, indent=4)
-            self.load_manual_proxies_to_ui()
+            self.refresh_proxy_country_counts()
             self.adb_out.append(
-                f"<font color='#7ee787'>[PROXY EDITOR] Successfully committed fields targeting [{country_code}].</font>")
+                f"<font color='#7ee787'>[PROXY EDITOR] Saved {len(parsed)} {mode_label} proxy record(s) for [{country_code}]. Backup: {backup_path or 'none'}</font>")
         except Exception as e:
             self.adb_out.append(
-                f"<font color='#ff7b72'>[PROXY EDITOR] Failed to write master list array: {str(e)}</font>")
+                f"<font color='#ff7b72'>[PROXY EDITOR] Failed to write proxy file: {str(e)}</font>")
 
     def start_global_proxy_routing(self):
         country_code = self.get_resolved_country_code()
@@ -1585,43 +4535,123 @@ class Forensics(QMainWindow):
             return
 
         auto_fallback = self.chk_auto_fallback.isChecked()
+        include_socks = self.include_socks_proxies()
+        proxy_timeout = self.proxy_timeout_spin.value() if hasattr(self, 'proxy_timeout_spin') else 10
+        if hasattr(self, 'chk_clear_device_proxy_before_route') and self.chk_clear_device_proxy_before_route.isChecked():
+            self.run_adb_cmd(f"{ADB_PATH} shell settings put global http_proxy :0")
+            self.adb_out.append(
+                "<font color='#8b949e'>[PROXY ROTATOR] Cleared Android global http_proxy before Frida per-app routing. macOS proxy settings were not changed.</font>")
         if hasattr(self, 'proxy_tester_worker') and self.proxy_tester_worker.isRunning():
             self.proxy_tester_worker.stop();
             self.proxy_tester_worker.wait()
 
-        self.proxy_tester_worker = ProxyTesterWorker(country_code, auto_fallback)
+        self.proxy_tester_worker = ProxyTesterWorker(country_code, auto_fallback, include_socks=include_socks, proxy_timeout_seconds=proxy_timeout)
         self.proxy_tester_worker.status_signal.connect(self.handle_proxy_worker_status)
         self.proxy_tester_worker.proxy_found_signal.connect(self.inject_validated_proxy)
         self.proxy_tester_worker.start()
 
     def handle_proxy_worker_status(self, status_type, message):
-        colors = {"INFO": "#58a6ff", "TESTING": "#8b949e", "WARN": "#ffa657", "SUCCESS": "#7ee787", "ERROR": "#ff7b72",
-                  "CRITICAL": "#f85149"}
-        color = colors.get(status_type, "#c9d1d9")
-        self.adb_out.append(f"<font color='{color}'>[PROXY ROTATOR] {message}</font>")
+        self.append_proxy_status(status_type, message)
 
-    def inject_validated_proxy(self, ip, port):
-        self.px_in.setText(f"{ip}:{port}")
+    def inject_validated_proxy(self, ip, port, protocol="http"):
+        # Do not copy this remote proxy into the Burp/Android global proxy field.
+        # Proxy routing can be either a per-app Frida hook or Android global http_proxy mode, depending on UI options.
+        protocol = str(protocol or "http").lower().strip()
+        if protocol in ("socks", "socks4", "socks5"):
+            normalized_protocol = protocol
+        elif protocol in ("http", "https"):
+            normalized_protocol = protocol
+        else:
+            normalized_protocol = "http"
+
+        self.current_validated_global_proxy = f"{normalized_protocol}://{ip}:{port}"
+        self.current_validated_global_proxy_tuple = (str(ip), str(port), normalized_protocol)
+        if hasattr(self, "global_proxy_status"):
+            self.global_proxy_status.setText(f"Validated proxy: {normalized_protocol}://{ip}:{port}")
+            self.global_proxy_status.setStyleSheet("color: #7ee787; padding-left: 8px;")
+
+        if hasattr(self, "chk_apply_android_global_proxy_after_validation") and self.chk_apply_android_global_proxy_after_validation.isChecked():
+            self.apply_android_global_proxy(ip, port, normalized_protocol)
+
+        if hasattr(self, "chk_android_global_proxy_only") and self.chk_android_global_proxy_only.isChecked():
+            self.adb_out.append(
+                "<font color='#58a6ff'>[PROXY ROTATOR] Android global-only mode enabled. Skipping Frida injection.</font>")
+            return
 
         raw_template = ""
         try:
-            with open(FRIDA_TEMPLATE_FILE, 'r') as f:
+            with open(FRIDA_TEMPLATE_FILE, 'r', encoding="utf-8") as f:
                 raw_template = f.read()
         except:
-            raw_template = "Java.perform(function() { console.log('Proxy connection: {ip}:{port}'); });"
+            raw_template = (
+                "Java.perform(function() { "
+                "console.log('Proxy connection: {protocol}://{ip}:{port}'); "
+                "});"
+            )
 
-        full_payload = raw_template.replace("{ip}", str(ip)).replace("{port}", str(port))
+        full_payload = (
+            raw_template
+            .replace("{ip}", str(ip))
+            .replace("{port}", str(port))
+            .replace("{protocol}", normalized_protocol)
+        )
 
-        self.editor.setText(full_payload)
+        self.editor.setPlainText(full_payload)
         self.adb_out.append(
-            "<font color='#7ee787'>[+] Archipelago instrumentation script compiled. Launching injection...</font>")
+            f"<font color='#7ee787'>[+] Protocol-aware proxy script compiled for {normalized_protocol}://{ip}:{port}. Launching injection...</font>")
         self.start_forge()
+
+
+    def apply_android_global_proxy(self, ip, port, protocol="http"):
+        protocol = str(protocol or "http").lower().strip()
+        if protocol.startswith("socks"):
+            self.adb_out.append(
+                f"<font color='#ffa657'>[ANDROID PROXY] Android global http_proxy does not support SOCKS directly. "
+                f"Not applying {protocol}://{ip}:{port}. Use an HTTP/HTTPS proxy for Android global proxy mode.</font>")
+            return False
+
+        host_port = f"{ip}:{port}"
+        self.run_adb_cmd(f"{ADB_PATH} shell settings put global http_proxy {host_port}")
+        if hasattr(self, "android_global_proxy_status"):
+            self.android_global_proxy_status.setText(f"Android global proxy: {host_port}")
+            self.android_global_proxy_status.setStyleSheet("color: #7ee787; padding-left: 8px;")
+
+        self.adb_out.append(
+            f"<font color='#7ee787'>[ANDROID PROXY] Set Android global http_proxy to {host_port}. "
+            f"Restart the target app so it picks up the Android global proxy.</font>")
+        return True
+
+    def apply_current_validated_proxy_to_android_global(self):
+        if not hasattr(self, "current_validated_global_proxy_tuple"):
+            self.adb_out.append(
+                "<font color='#ffa657'>[ANDROID PROXY] No validated proxy yet. Click Validate / Route Proxy first.</font>")
+            return
+
+        ip, port, protocol = self.current_validated_global_proxy_tuple
+        self.apply_android_global_proxy(ip, port, protocol)
+
+    def clear_android_global_proxy(self):
+        self.run_adb_cmd(f"{ADB_PATH} shell \"settings put global http_proxy :0; settings delete global http_proxy\"")
+        if hasattr(self, "android_global_proxy_status"):
+            self.android_global_proxy_status.setText("Android global proxy: cleared")
+            self.android_global_proxy_status.setStyleSheet("color: #8b949e; padding-left: 8px;")
+        self.adb_out.append(
+            "<font color='#ff7b72'>[ANDROID PROXY] Cleared Android global http_proxy. macOS proxy settings were not changed.</font>")
+
+    def check_android_global_proxy(self):
+        self.run_adb_cmd(f"{ADB_PATH} shell settings get global http_proxy")
+        self.adb_out.append("<font color='#58a6ff'>[ANDROID PROXY] Checking Android global http_proxy...</font>")
 
     def remove_global_proxy(self):
         if hasattr(self,
                    'proxy_tester_worker') and self.proxy_tester_worker.isRunning(): self.proxy_tester_worker.stop()
         self.clear_burp_proxy();
         self.stop_frida_worker()
+        if hasattr(self, "current_validated_global_proxy_tuple"):
+            delattr(self, "current_validated_global_proxy_tuple")
+        if hasattr(self, "global_proxy_status"):
+            self.global_proxy_status.setText("Validated proxy: none")
+            self.global_proxy_status.setStyleSheet("color: #8b949e; padding-left: 8px;")
         self.adb_out.append(
             "<font color='#ff7b72'>[-] Global proxy rules unlinked and app session detached successfully.</font>")
 
@@ -1644,9 +4674,40 @@ class Forensics(QMainWindow):
             frida_mode = self.frida_injection_mode.currentData() or FRIDA_INJECTION_MODE_CLI
         if hasattr(self, 'frida_cli_path'):
             frida_cli_path = self.frida_cli_path.text().strip() or FRIDA_CLI_PATH
+        editor_font_size = 12
+        if hasattr(self, 'editor_font_spin'):
+            editor_font_size = self.editor_font_spin.value()
+        elif hasattr(self, 'editor'):
+            editor_font_size = self.editor.current_font_size()
+
+        frida_log_font_size = self.frida_log_font_spin.value() if hasattr(self, 'frida_log_font_spin') else 10
+        logcat_font_size = self.logcat_font_spin.value() if hasattr(self, 'logcat_font_spin') else 10
+        adb_console_font_size = self.adb_console_font_spin.value() if hasattr(self, 'adb_console_font_spin') else 10
+
+        logcat_visible_levels = []
+        if hasattr(self, 'logcat_level_checks'):
+            logcat_visible_levels = [code for code, chk in self.logcat_level_checks.items() if chk.isChecked()]
+        logcat_min_level = self.log_level_box.currentText() if hasattr(self, 'log_level_box') else "Verbose"
+        logcat_hide_nonmatching = self.log_hard_filter.isChecked() if hasattr(self, 'log_hard_filter') else True
+        logcat_auto_scroll = self.log_auto_scroll.isChecked() if hasattr(self, 'log_auto_scroll') else True
+        logcat_buffer_rows = self.logcat_buffer_spin.value() if hasattr(self, 'logcat_buffer_spin') else 20000
+        include_socks_proxy = self.chk_include_socks_proxy.isChecked() if hasattr(self, 'chk_include_socks_proxy') else False
+        proxy_timeout_seconds = self.proxy_timeout_spin.value() if hasattr(self, 'proxy_timeout_spin') else 10
+
         d = {"scale": self.scale_spin.value(), "last_pkg": self.target_pkg.currentText(),
              "path_history": self.path_history, "console_history": console_history,
-             "frida_injection_mode": frida_mode, "frida_cli_path": frida_cli_path}
+             "frida_injection_mode": frida_mode, "frida_cli_path": frida_cli_path,
+             "editor_font_size": editor_font_size,
+             "frida_log_font_size": frida_log_font_size,
+             "logcat_font_size": logcat_font_size,
+             "adb_console_font_size": adb_console_font_size,
+             "logcat_min_level": logcat_min_level,
+             "logcat_visible_levels": logcat_visible_levels,
+             "logcat_hide_nonmatching": logcat_hide_nonmatching,
+             "logcat_auto_scroll": logcat_auto_scroll,
+             "logcat_buffer_rows": logcat_buffer_rows,
+             "include_socks_proxy": include_socks_proxy,
+             "proxy_timeout_seconds": proxy_timeout_seconds}
         with open(CONFIG_FILE, 'w') as f: json.dump(d, f)
 
     def load_settings(self):
@@ -1669,6 +4730,52 @@ class Forensics(QMainWindow):
                         self.frida_injection_mode.setCurrentIndex(idx if idx >= 0 else 0)
                     if hasattr(self, 'frida_cli_path'):
                         self.frida_cli_path.setText(d.get("frida_cli_path", FRIDA_CLI_PATH))
+
+                    editor_font_size = int(d.get("editor_font_size", 12))
+                    if hasattr(self, 'editor_font_spin'):
+                        self.editor_font_spin.setValue(editor_font_size)
+                    if hasattr(self, 'editor'):
+                        self.editor.set_script_font_size(editor_font_size, emit_signal=False)
+
+                    frida_log_font_size = int(d.get("frida_log_font_size", 10))
+                    if hasattr(self, 'frida_log_font_spin'):
+                        self.frida_log_font_spin.setValue(frida_log_font_size)
+                    if hasattr(self, 'frida_display'):
+                        self.frida_display.set_log_font_size(frida_log_font_size, emit_signal=False)
+
+                    logcat_font_size = int(d.get("logcat_font_size", 10))
+                    if hasattr(self, 'logcat_font_spin'):
+                        self.logcat_font_spin.setValue(logcat_font_size)
+                    if hasattr(self, 'log_display'):
+                        self.log_display.set_log_font_size(logcat_font_size, emit_signal=False)
+
+                    adb_console_font_size = int(d.get("adb_console_font_size", 10))
+                    if hasattr(self, 'adb_console_font_spin'):
+                        self.adb_console_font_spin.setValue(adb_console_font_size)
+                    if hasattr(self, 'console'):
+                        self.console.set_log_font_size(adb_console_font_size, emit_signal=False)
+
+                    if hasattr(self, 'log_level_box'):
+                        idx = self.log_level_box.findText(d.get("logcat_min_level", "Verbose"))
+                        if idx >= 0:
+                            self.log_level_box.setCurrentIndex(idx)
+                    if hasattr(self, 'log_hard_filter'):
+                        self.log_hard_filter.setChecked(bool(d.get("logcat_hide_nonmatching", True)))
+                    if hasattr(self, 'log_auto_scroll'):
+                        self.log_auto_scroll.setChecked(bool(d.get("logcat_auto_scroll", True)))
+                    if hasattr(self, 'logcat_buffer_spin'):
+                        buffer_rows = int(d.get("logcat_buffer_rows", 20000))
+                        self.logcat_buffer_spin.setValue(max(self.logcat_buffer_spin.minimum(), min(self.logcat_buffer_spin.maximum(), buffer_rows)))
+                    if hasattr(self, 'logcat_level_checks'):
+                        visible_levels = d.get("logcat_visible_levels", ["V", "D", "I", "W", "E", "F"])
+                        self.set_logcat_level_checks(visible_levels)
+                    if hasattr(self, 'chk_include_socks_proxy'):
+                        self.chk_include_socks_proxy.setChecked(bool(d.get("include_socks_proxy", False)))
+                    if hasattr(self, 'proxy_timeout_spin'):
+                        timeout_seconds = int(d.get("proxy_timeout_seconds", 10))
+                        self.proxy_timeout_spin.setValue(max(self.proxy_timeout_spin.minimum(), min(self.proxy_timeout_spin.maximum(), timeout_seconds)))
+                    if hasattr(self, 'chk_include_socks_proxy'):
+                        self.refresh_proxy_country_counts()
             except Exception as e:
                 print(f"Load error: {e}")
 
@@ -1685,7 +4792,7 @@ class Forensics(QMainWindow):
 
     def fetch_all_apps(self):
         try:
-            res = subprocess.check_output(f"{ADB_PATH} shell pm list packages -3", shell=True, text=True).splitlines()
+            res = subprocess.check_output(f"{ADB_PATH} shell pm list packages -3", shell=True, text=True, encoding="utf-8", errors="replace").splitlines()
             pkgs = [l.replace("package:", "").strip() for l in res if l.startswith("package:")]
             self.app_selector.clear();
             self.app_selector.addItems(sorted(pkgs))
@@ -1694,7 +4801,7 @@ class Forensics(QMainWindow):
 
     def fetch_running_apps(self):
         try:
-            res = subprocess.check_output(f"{ADB_PATH} shell ps -A", shell=True, text=True).splitlines();
+            res = subprocess.check_output(f"{ADB_PATH} shell ps -A", shell=True, text=True, encoding="utf-8", errors="replace").splitlines();
             running = set()
             for l in res:
                 p = l.split()
@@ -1733,12 +4840,31 @@ class Forensics(QMainWindow):
             except:
                 pass
 
+    def auto_size_remote_columns(self):
+        """Keep File Explorer columns readable after startup and every refresh."""
+        if not hasattr(self, "remote_table"):
+            return
+        try:
+            header = self.remote_table.horizontalHeader()
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            for col in range(1, self.remote_table.columnCount()):
+                self.remote_table.resizeColumnToContents(col)
+            self.remote_table.setColumnWidth(1, max(self.remote_table.columnWidth(1), 90))
+            self.remote_table.setColumnWidth(2, max(self.remote_table.columnWidth(2), 150))
+            self.remote_table.setColumnWidth(3, max(self.remote_table.columnWidth(3), 95))
+        except Exception:
+            pass
+
     def refresh_remote_fs(self):
         self.remote_table.setRowCount(0);
         self.remote_table.setSortingEnabled(False)
         try:
             res = subprocess.check_output(f"{ADB_PATH} shell ls -al '{self.current_remote_dir}'", shell=True,
-                                          text=True).splitlines()
+                                          text=True, encoding="utf-8", errors="replace").splitlines()
             for line in res[1:]:
                 p = line.split()
                 if len(p) < 8: continue
@@ -1756,6 +4882,7 @@ class Forensics(QMainWindow):
             pass
         self.remote_table.setSortingEnabled(True);
         self.path_box.setCurrentText(self.current_remote_dir)
+        self.auto_size_remote_columns()
 
     def on_remote_item_double_click(self, item):
         if item.column() == 0 and item.text().startswith("[D] "):
@@ -1836,10 +4963,18 @@ class Forensics(QMainWindow):
         self.target_pkg.setCurrentText(self.proc_table.item(item.row(), 1).text())
 
     def on_file_clicked(self, i):
-        p = self.f_model.filePath(i);
-        (os.path.isfile(p)) and open(p).read() and self.editor.setText(
-            open(p).read());
-        self.current_file_path = p
+        p = self.f_model.filePath(i)
+        if not os.path.isfile(p):
+            return
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                self.editor.setPlainText(f.read())
+            self.current_file_path = p
+            self.editor.document().setModified(False)
+            self.refresh_editor_search_highlights(reset=True)
+            self.update_editor_status("Loaded")
+        except Exception as e:
+            QMessageBox.warning(self, "Open Error", f"Could not open script: {str(e)}")
 
     def start_forge(self):
         self.stop_frida_worker();
@@ -1871,19 +5006,212 @@ class Forensics(QMainWindow):
             self.process_new_log);
         self.log_worker.start()
 
+    def parse_logcat_level(self, line):
+        """Best-effort Android logcat level parser that supports threadtime and brief/tag forms."""
+        order = getattr(self, "logcat_order", ["V", "D", "I", "W", "E", "F"])
+        # Common threadtime: 05-18 15:00:00.000  1234  5678 D Tag: message
+        # Common brief: D/Tag(1234): message
+        for code in reversed(order):
+            if f" {code} " in line or f" {code}/" in line or line.startswith(f"{code}/"):
+                return code
+        return "V"
+
+    def set_logcat_max_entries(self, value):
+        self.logcat_max_entries = int(value)
+        if hasattr(self, "logcat_entries") and len(self.logcat_entries) > self.logcat_max_entries:
+            self.logcat_entries = self.logcat_entries[-self.logcat_max_entries:]
+            self.refresh_logcat_display()
+        else:
+            self.update_logcat_status()
+        self.save_settings()
+
+    def set_logcat_level_checks(self, visible_levels):
+        visible = set(visible_levels or [])
+        if not hasattr(self, "logcat_level_checks"):
+            return
+        for code, chk in self.logcat_level_checks.items():
+            chk.blockSignals(True)
+            chk.setChecked(code in visible)
+            chk.blockSignals(False)
+        self.refresh_logcat_display()
+
+    def clear_logcat_buffer(self):
+        self.logcat_entries = []
+        self.logcat_pending_html = []
+        self.logcat_last_visible_count = 0
+        if hasattr(self, "log_display"):
+            self.log_display.clear()
+        self.update_logcat_status(visible_count=0)
+
+    def get_visible_logcat_entries(self):
+        if not hasattr(self, "logcat_entries"):
+            return []
+        return [entry for entry in self.logcat_entries if self.logcat_entry_matches_filters(entry)]
+
+    def logcat_entry_matches_filters(self, entry):
+        level = entry.get("level", "V")
+        order = getattr(self, "logcat_order", ["V", "D", "I", "W", "E", "F"])
+
+        # Minimum visible severity dropdown: hide below this level without discarding from buffer.
+        try:
+            min_level = self.log_levels[self.log_level_box.currentText()]
+            if order.index(level) < order.index(min_level):
+                return False
+        except Exception:
+            pass
+
+        # Per-level checkboxes.
+        checks = getattr(self, "logcat_level_checks", {})
+        if checks and level in checks and not checks[level].isChecked():
+            return False
+
+        query = self.log_filter.text().strip() if hasattr(self, "log_filter") else ""
+        if query and hasattr(self, "log_hard_filter") and self.log_hard_filter.isChecked():
+            return query.lower() in entry.get("line", "").lower()
+
+        return True
+
+    def highlight_logcat_search_html(self, escaped_text, raw_text):
+        query = self.log_filter.text().strip() if hasattr(self, "log_filter") else ""
+        if not query:
+            return escaped_text
+        # Highlight only when Hide Non-Matching is off; when on, the visible rows are already matches.
+        if hasattr(self, "log_hard_filter") and self.log_hard_filter.isChecked():
+            return escaped_text
+        try:
+            pattern = re.escape(query)
+            return re.sub(
+                pattern,
+                lambda m: f"<span style='background-color:#d29922; color:#010409;'>{html.escape(m.group(0), quote=False)}</span>",
+                escaped_text,
+                flags=re.IGNORECASE,
+            )
+        except Exception:
+            return escaped_text
+
+    def format_logcat_entry_html(self, entry):
+        level = entry.get("level", "V")
+        color = getattr(self, "logcat_colors", {}).get(level, "#d1d5da")
+        raw_line = entry.get("line", "")
+        escaped = html.escape(raw_line, quote=False)
+        escaped = self.highlight_logcat_search_html(escaped, raw_line)
+        return f'<font color="{color}">{escaped}</font>'
+
+    def update_logcat_status(self, visible_count=None):
+        if not hasattr(self, "logcat_count_label"):
+            return
+        buffered = len(getattr(self, "logcat_entries", []))
+        # Important: do NOT call get_visible_logcat_entries() here. This function is called
+        # frequently while logcat is streaming, and rescanning the whole buffer on every line
+        # will freeze the UI. refresh_logcat_display() computes an exact count when filters change.
+        if visible_count is None:
+            visible_count = int(getattr(self, "logcat_last_visible_count", 0))
+        paused = " | Display Paused" if getattr(self, "log_paused", False) else ""
+        pending = len(getattr(self, "logcat_pending_html", []))
+        pending_text = f" | Pending Draw: {pending}" if pending else ""
+        self.logcat_count_label.setText(f"Buffered: {buffered} | Visible: {visible_count}{paused}{pending_text}")
+
+    def schedule_logcat_status_update(self):
+        timer = getattr(self, "logcat_status_timer", None)
+        if timer is not None and not timer.isActive():
+            timer.start(500)
+
+    def schedule_logcat_flush(self):
+        timer = getattr(self, "logcat_flush_timer", None)
+        if timer is not None and not timer.isActive():
+            timer.start(150)
+
+    def flush_logcat_pending_display(self):
+        if not hasattr(self, "log_display"):
+            return
+        pending = getattr(self, "logcat_pending_html", [])
+        if not pending:
+            self.update_logcat_status()
+            return
+        # If display is paused, do not draw stale queued lines. They remain in the buffer
+        # and will be redrawn by refresh_logcat_display() when resumed.
+        if getattr(self, "log_paused", False):
+            self.logcat_pending_html = []
+            self.update_logcat_status()
+            return
+        self.logcat_pending_html = []
+        self.log_display.append("<br>".join(pending))
+        if hasattr(self, "log_auto_scroll") and self.log_auto_scroll.isChecked():
+            self.log_display.moveCursor(QTextCursor.End)
+        self.update_logcat_status()
+
+    def refresh_logcat_display(self):
+        if not hasattr(self, "log_display"):
+            return
+        # Filter changes are user-driven, so this is the one place where we intentionally
+        # rescan the buffer and compute the exact visible set/count.
+        self.logcat_pending_html = []
+        visible = self.get_visible_logcat_entries()
+        self.logcat_last_visible_count = len(visible)
+        self.log_display.clear()
+        # Append in one HTML batch instead of thousands of QTextEdit.append() calls.
+        if visible:
+            self.log_display.setHtml("<br>".join(self.format_logcat_entry_html(entry) for entry in visible))
+            if hasattr(self, "log_auto_scroll") and self.log_auto_scroll.isChecked():
+                self.log_display.moveCursor(QTextCursor.End)
+        self.update_logcat_status(visible_count=len(visible))
+
+    def export_visible_logcat(self):
+        visible = self.get_visible_logcat_entries()
+        if not visible:
+            QMessageBox.information(self, "Export LogCat", "No visible LogCat rows to export.")
+            return
+        default_name = os.path.join(BASE_DIR, f"logcat_visible_{int(time.time())}.txt")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Visible LogCat", default_name, "Text Files (*.txt);;All Files (*)")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", errors="replace") as f:
+                for entry in visible:
+                    f.write(entry.get("line", "") + "\n")
+            self.console.append(f"<font color='#7ee787'>[LOGCAT] Exported {len(visible)} visible rows to {html.escape(path)}</font>")
+        except Exception as e:
+            QMessageBox.warning(self, "Export Failed", f"Could not export LogCat rows:\n{str(e)}")
+
     def process_new_log(self, line):
-        if self.log_paused: return
-        cur_lvl = self.log_levels[self.log_level_box.currentText()];
-        order = ["V", "D", "I", "W", "E", "F"];
-        line_lvl = "V"
-        for code in order[::-1]:
-            if f" {code} " in line or f" {code}/" in line: line_lvl = code; break
-        if order.index(line_lvl) < order.index(cur_lvl) or (
-                self.log_filter.text().lower() not in line.lower() and self.log_hard_filter.isChecked()): return
-        c = {"V": "#8b949e", "D": "#79c0ff", "I": "#aff5b4", "W": "#ffa657", "E": "#ff7b72", "F": "#f85149"}.get(
-            line_lvl, "#d1d5da")
-        self.log_display.append(f'<font color="{c}">{line}</font>');
-        self.log_display.moveCursor(QTextCursor.End)
+        # Always buffer incoming rows first. Filters only affect visibility, so changing level/search later
+        # never loses earlier rows. Keep this method O(1); do not rescan the full buffer here.
+        if not hasattr(self, "logcat_entries"):
+            self.logcat_entries = []
+        level = self.parse_logcat_level(line)
+        entry = {"line": line, "level": level, "time": time.time()}
+        self.logcat_entries.append(entry)
+
+        max_entries = int(getattr(self, "logcat_max_entries", 20000))
+        if len(self.logcat_entries) > max_entries:
+            overflow = len(self.logcat_entries) - max_entries
+            removed = self.logcat_entries[:overflow]
+            self.logcat_entries = self.logcat_entries[overflow:]
+            # Keep the visible count approximately correct without scanning the whole buffer.
+            try:
+                removed_visible = sum(1 for old_entry in removed if self.logcat_entry_matches_filters(old_entry))
+                self.logcat_last_visible_count = max(0, int(getattr(self, "logcat_last_visible_count", 0)) - removed_visible)
+            except Exception:
+                pass
+
+        try:
+            entry_visible = self.logcat_entry_matches_filters(entry)
+        except Exception:
+            entry_visible = True
+
+        if entry_visible:
+            self.logcat_last_visible_count = int(getattr(self, "logcat_last_visible_count", 0)) + 1
+            if not getattr(self, "log_paused", False):
+                self.logcat_pending_html.append(self.format_logcat_entry_html(entry))
+                # Avoid unbounded pending growth if the UI is busy. If the queue gets too large,
+                # force a full redraw soon instead of trying to append every line individually.
+                if len(self.logcat_pending_html) > 1000:
+                    self.logcat_pending_html = []
+                    QTimer.singleShot(0, self.refresh_logcat_display)
+                else:
+                    self.schedule_logcat_flush()
+
+        self.schedule_logcat_status_update()
 
     def _clean_terminal_text(self, value):
         """Remove ANSI escape/control characters before writing into QTextEdit HTML."""
@@ -1914,6 +5242,8 @@ class Forensics(QMainWindow):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 env=env
             )
@@ -2070,30 +5400,67 @@ class Forensics(QMainWindow):
             (QMessageBox.question(self, "Del", "Delete?")) == QMessageBox.Yes and self.f_model.remove(idx)
 
     def create_new_project(self):
-        (n := QInputDialog.getText(self, "Project", "Name:")[0]) and os.makedirs(os.path.join(PROJECTS_DIR, n),
-                                                                                 exist_ok=True)
+        name, ok = QInputDialog.getText(self, "Frida Script Folder", "Folder name:")
+        if ok and name.strip():
+            safe_name = os.path.basename(name.strip())
+            os.makedirs(os.path.join(FRIDA_SCRIPTS_DIR, safe_name), exist_ok=True)
+            if hasattr(self, "f_tree"):
+                self.f_tree.setRootIndex(self.f_model.index(FRIDA_SCRIPTS_DIR))
 
     def create_new_script(self, p):
-        (n := QInputDialog.getText(self, "Script", "Name:")[0]) and open(os.path.join(p, n + ".js"), 'w').write(
-            "// Frida\nJava.perform(function() {});")
+        if not os.path.abspath(p).startswith(os.path.abspath(FRIDA_SCRIPTS_DIR)):
+            p = FRIDA_SCRIPTS_DIR
+        name, ok = QInputDialog.getText(self, "Script", "Name:")
+        if ok and name.strip():
+            safe_name = os.path.basename(name.strip())
+            if not safe_name.lower().endswith(".js"):
+                safe_name += ".js"
+            script_path = os.path.join(p, safe_name)
+            with open(script_path, 'w', encoding="utf-8") as f:
+                f.write("// Frida\nJava.perform(function() {\n    console.log('Frida script loaded');\n});\n")
+            self.current_file_path = script_path
+            self.on_file_clicked(self.f_model.index(script_path))
 
     def create_new_folder(self, p):
-        (n := QInputDialog.getText(self, "Folder", "Name:")[0]) and os.makedirs(os.path.join(p, n), exist_ok=True)
+        if not os.path.abspath(p).startswith(os.path.abspath(FRIDA_SCRIPTS_DIR)):
+            p = FRIDA_SCRIPTS_DIR
+        name, ok = QInputDialog.getText(self, "Folder", "Name:")
+        if ok and name.strip():
+            safe_name = os.path.basename(name.strip())
+            os.makedirs(os.path.join(p, safe_name), exist_ok=True)
 
     def beautify_code(self):
         try:
             raw_code = self.editor.toPlainText()
             if not raw_code.strip(): return
+            cursor_pos = self.editor.textCursor().position()
             opts = jsbeautifier.default_options();
             opts.indent_size = 4;
             opts.space_in_empty_paren = True
-            self.editor.setText(jsbeautifier.beautify(raw_code, opts));
+            self.editor.setPlainText(jsbeautifier.beautify(raw_code, opts));
+            cursor = QTextCursor(self.editor.document())
+            cursor.setPosition(min(cursor_pos, len(self.editor.toPlainText())))
+            self.editor.setTextCursor(cursor)
+            self.editor.document().setModified(True)
+            self.refresh_editor_search_highlights(reset=False)
             self.adb_out.append("[SYSTEM] Code beautified successfully.")
+            self.update_editor_status("Beautified")
         except Exception as e:
             QMessageBox.warning(self, "Beautify Error", f"Could not beautify: {str(e)}")
 
     def save_script(self):
-        (self.current_file_path) and open(self.current_file_path, 'w').write(self.editor.toPlainText())
+        if not self.current_file_path:
+            self.save_script_as()
+            return
+        try:
+            os.makedirs(os.path.dirname(self.current_file_path), exist_ok=True)
+            with open(self.current_file_path, 'w', encoding='utf-8', errors='replace') as f:
+                f.write(self.editor.toPlainText())
+            self.editor.document().setModified(False)
+            self.update_editor_status("Saved")
+            self.route_frida_log("SYSTEM", f"Saved script: {self.current_file_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Could not save script: {str(e)}")
 
     def run_proc_filter(self):
         (q := self.p_search.text().lower()) and [
@@ -2199,6 +5566,13 @@ class Forensics(QMainWindow):
 
     def toggle_log_pause(self):
         self.log_paused = not self.log_paused
+        if hasattr(self, "btn_log_pause"):
+            self.btn_log_pause.setText("▶ Resume Display" if self.log_paused else "⏸ Pause Display")
+        if self.log_paused:
+            self.logcat_pending_html = []
+            self.update_logcat_status()
+        else:
+            self.refresh_logcat_display()
 
     def get_ip(self):
         try:
