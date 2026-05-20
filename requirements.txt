@@ -1,30 +1,86 @@
 # Ultimate Forensics Toolbox - Python Requirements
+# Current integrated toolbox baseline: v67+
 # Tested against local Python API, local CLI, and Android frida-server all reporting Frida 17.9.1.
-
-# Core UI Framework
-PyQt5==5.15.10
-
-# Dynamic Instrumentation
+#
 # IMPORTANT:
-# Keep this frida version matched to /data/local/tmp/frida-server on the Android device.
-# Your current verified working stack:
+# Keep the frida Python package version matched to /data/local/tmp/frida-server on the Android device.
+# Current verified working stack:
 #   Python API module: 17.9.1
 #   Local CLI/frida-tools runtime: 17.9.1
 #   Android frida-server: 17.9.1
-frida==17.9.1
-
-# Frida CLI tools package.
-# Note: frida-tools has its own package version; `frida --version` prints the Frida core/runtime version.
-frida-tools==14.8.2
-
-# Code Formatting (for the ✨ Beautify button)
-jsbeautifier==1.14.11
-
-# HTTP/proxy validation support used by ProxyTesterWorker
-requests==2.32.3
-
-# System Utilities
-# adb and scrcpy are not Python packages.
-# Install on macOS with:
+#
+# macOS system tools are NOT Python packages. Install separately:
 #   brew install --cask android-platform-tools
 #   brew install scrcpy
+#   brew install node
+# Optional external tools for some workspaces:
+#   brew install apktool
+#   brew install --cask dotnet-sdk
+#   npm install -g prettier
+
+# ----------------------------------------------------------------------
+# Core UI Framework
+# ----------------------------------------------------------------------
+PyQt5==5.15.10
+
+# ----------------------------------------------------------------------
+# Dynamic Instrumentation / Frida
+# ----------------------------------------------------------------------
+frida==17.9.1
+frida-tools==14.8.2
+
+# ----------------------------------------------------------------------
+# Formatting / Beautifier
+# Used by:
+#   - Frida Manager Beautify
+#   - Beautifier workspace
+#   - APK Extractor preview beautify
+# ----------------------------------------------------------------------
+jsbeautifier==1.14.11
+
+# ----------------------------------------------------------------------
+# HTTP / Proxy / SOCKS support
+# Used by:
+#   - Proxy validator/router
+#   - Proxy source imports
+#   - SOCKS proxy validation
+# ----------------------------------------------------------------------
+requests==2.32.3
+PySocks==1.7.1
+
+# ----------------------------------------------------------------------
+# Data handling / reports / exports
+# Used by:
+#   - Rubiks CSV template/draft/report workflow
+#   - Static Decrypter Excel export
+# ----------------------------------------------------------------------
+pandas==2.2.3
+openpyxl==3.1.5
+
+# ----------------------------------------------------------------------
+# APK / DEX analysis
+# Used by:
+#   - APK Explorer DEX preview/decompile
+#   - Static Decrypter DEX decompile
+# ----------------------------------------------------------------------
+androguard==4.1.3
+
+# ----------------------------------------------------------------------
+# JavaScript execution for Static Decrypter
+# Used by:
+#   - Static Decrypter JavaScript decrypt() scripts
+# ----------------------------------------------------------------------
+quickjs==1.19.4
+
+# ----------------------------------------------------------------------
+# Optional spellcheck support
+# Used by:
+#   - Security Review Workstation
+#
+# NOTE:
+# pyenchant may require system dictionary/enchant libraries depending on OS.
+# If install fails, the Security Review Workstation still runs without spellcheck.
+# macOS option:
+#   brew install enchant
+# ----------------------------------------------------------------------
+pyenchant==3.2.2
